@@ -1,0 +1,699 @@
+{
+  "version": "1.4",
+  "timestamp": "2026-02-19T16:49:39.046Z",
+  "desks": [
+    {
+      "id": "CEO",
+      "role": "Orchestrator",
+      "position": {
+        "x": -0.257,
+        "y": 0,
+        "z": -4.478
+      },
+      "rotation": {
+        "y": -3.142
+      }
+    },
+    {
+      "id": "Head of Biz (COO)",
+      "role": "COO",
+      "position": {
+        "x": -3.891,
+        "y": 0,
+        "z": -2.262
+      },
+      "rotation": {
+        "y": -0.803
+      }
+    },
+    {
+      "id": "report-agent",
+      "role": "Report",
+      "position": {
+        "x": -6.189,
+        "y": 0,
+        "z": -0.202
+      },
+      "rotation": {
+        "y": -2.182
+      }
+    },
+    {
+      "id": "pm-agent",
+      "role": "PM",
+      "position": {
+        "x": -5.694,
+        "y": 0,
+        "z": 0.157
+      },
+      "rotation": {
+        "y": 0.96
+      }
+    },
+    {
+      "id": "Head of Tech (CTO)",
+      "role": "CTO",
+      "position": {
+        "x": -0.252,
+        "y": 0,
+        "z": -1.559
+      },
+      "rotation": {
+        "y": 0
+      }
+    },
+    {
+      "id": "codeur-agent",
+      "role": "Codeur",
+      "position": {
+        "x": 0.785,
+        "y": 0,
+        "z": 1.786
+      },
+      "rotation": {
+        "y": 1.571
+      }
+    },
+    {
+      "id": "debugger-agent",
+      "role": "Debugger",
+      "position": {
+        "x": -0.186,
+        "y": 0,
+        "z": 2.11
+      },
+      "rotation": {
+        "y": 0
+      }
+    },
+    {
+      "id": "ui-agent",
+      "role": "UI",
+      "position": {
+        "x": -1.151,
+        "y": 0,
+        "z": 0.493
+      },
+      "rotation": {
+        "y": -1.571
+      }
+    },
+    {
+      "id": "ux-agent",
+      "role": "UX",
+      "position": {
+        "x": 0.782,
+        "y": 0,
+        "z": 0.489
+      },
+      "rotation": {
+        "y": 1.571
+      }
+    },
+    {
+      "id": "media-tech-agent",
+      "role": "Media Tech",
+      "position": {
+        "x": -1.149,
+        "y": 0,
+        "z": 1.785
+      },
+      "rotation": {
+        "y": -1.571
+      }
+    },
+    {
+      "id": "Head of Security (CISO)",
+      "role": "CISO",
+      "position": {
+        "x": -5.316,
+        "y": 0,
+        "z": -4.642
+      },
+      "rotation": {
+        "y": -1.553
+      }
+    },
+    {
+      "id": "monitoring-agent",
+      "role": "Monitoring",
+      "position": {
+        "x": -8.688,
+        "y": 0,
+        "z": -3.238
+      },
+      "rotation": {
+        "y": 0.785
+      }
+    },
+    {
+      "id": "backup-agent",
+      "role": "Backup",
+      "position": {
+        "x": -9.153,
+        "y": 0,
+        "z": -3.708
+      },
+      "rotation": {
+        "y": -2.356
+      }
+    },
+    {
+      "id": "Head of Personal (COS)",
+      "role": "COS",
+      "position": {
+        "x": 3.496,
+        "y": 0,
+        "z": -2.004
+      },
+      "rotation": {
+        "y": 0.785
+      }
+    },
+    {
+      "id": "perso-agent",
+      "role": "Perso",
+      "position": {
+        "x": 6.664,
+        "y": 0,
+        "z": 0.511
+      },
+      "rotation": {
+        "y": -1.571
+      }
+    },
+    {
+      "id": "calendar-agent",
+      "role": "Calendar",
+      "position": {
+        "x": 7.312,
+        "y": 0,
+        "z": 0.515
+      },
+      "rotation": {
+        "y": 1.571
+      }
+    },
+    {
+      "id": "Head of Growth (MB)",
+      "role": "MB",
+      "position": {
+        "x": 4.983,
+        "y": 0,
+        "z": -4.137
+      },
+      "rotation": {
+        "y": 1.326
+      }
+    },
+    {
+      "id": "trend-agent",
+      "role": "Trend",
+      "position": {
+        "x": 8.43,
+        "y": 0,
+        "z": -2.796
+      },
+      "rotation": {
+        "y": -0.785
+      }
+    },
+    {
+      "id": "ads-agent",
+      "role": "Ads",
+      "position": {
+        "x": 8.886,
+        "y": 0,
+        "z": -3.242
+      },
+      "rotation": {
+        "y": 2.356
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "route_1771519027789",
+      "name": "CEO → Head of Security (CISO)",
+      "startName": "CEO",
+      "endName": "Head of Security (CISO)",
+      "points": [
+        {
+          "x": -0.698243055660092,
+          "z": -5.043236130502512
+        },
+        {
+          "x": -4.502935509686723,
+          "z": -4.675449193279938
+        }
+      ],
+      "finalOrientation": -1.5296798566769647
+    },
+    {
+      "id": "route_1771519146980",
+      "name": "CEO → Head of Biz (COO)",
+      "startName": "CEO",
+      "endName": "Head of Biz (COO)",
+      "points": [
+        {
+          "x": -0.7056490983479475,
+          "z": -5.039887012290515
+        },
+        {
+          "x": -1.6254323678074418,
+          "z": -4.76500925360147
+        },
+        {
+          "x": -3.359276691846029,
+          "z": -2.81972049980208
+        }
+      ],
+      "finalOrientation": -0.7615398803137967
+    },
+    {
+      "id": "route_1771519218922",
+      "name": "CEO → Head of Tech (CTO)",
+      "startName": "CEO",
+      "endName": "Head of Tech (CTO)",
+      "points": [
+        {
+          "x": -0.6845046553718672,
+          "z": -5.022106479967806
+        },
+        {
+          "x": -1.1602546223336745,
+          "z": -4.926956486575444
+        },
+        {
+          "x": -1.2025435082858353,
+          "z": -3.711151015450825
+        },
+        {
+          "x": -0.3250491247785016,
+          "z": -2.410767772421885
+        }
+      ],
+      "finalOrientation": 0.08555244658905198
+    },
+    {
+      "id": "route_1771519241320",
+      "name": "CEO → Head of Personal (COS)",
+      "startName": "CEO",
+      "endName": "Head of Personal (COS)",
+      "points": [
+        {
+          "x": 0.10815233666816837,
+          "z": -5.0170952092385335
+        },
+        {
+          "x": 0.6353352032250048,
+          "z": -4.850616409273217
+        },
+        {
+          "x": 2.868925769426338,
+          "z": -2.6308990764023266
+        }
+      ],
+      "finalOrientation": 0.7855378427424725
+    },
+    {
+      "id": "route_1771519279875",
+      "name": "CEO → Head of Growth (MB)",
+      "startName": "CEO",
+      "endName": "Head of Growth (MB)",
+      "points": [
+        {
+          "x": 0.11697642214546254,
+          "z": -5.016778673368275
+        },
+        {
+          "x": 4.15020313512879,
+          "z": -4.337645928967587
+        }
+      ],
+      "finalOrientation": 1.3343719777344902
+    },
+    {
+      "id": "route_1771519353537",
+      "name": "Head of Security (CISO) → monitoring-agent",
+      "startName": "Head of Security (CISO)",
+      "endName": "monitoring-agent",
+      "points": [
+        {
+          "x": -5.886938695743776,
+          "z": -4.352940533531766
+        },
+        {
+          "x": -6.864933090426059,
+          "z": -4.348985576479244
+        },
+        {
+          "x": -7.860250816178567,
+          "z": -4.027915342365532
+        }
+      ],
+      "finalOrientation": -0.8087818407853125
+    },
+    {
+      "id": "route_1771519378280",
+      "name": "Head of Security (CISO) → backup-agent",
+      "startName": "Head of Security (CISO)",
+      "endName": "backup-agent",
+      "points": [
+        {
+          "x": -5.8803177058106755,
+          "z": -4.905507315609678
+        },
+        {
+          "x": -7.132491618854153,
+          "z": -4.798483904238441
+        },
+        {
+          "x": -8.309749143937763,
+          "z": -4.391794941027738
+        }
+      ],
+      "finalOrientation": -0.8894422727391367
+    },
+    {
+      "id": "route_1771519410020",
+      "name": "Head of Biz (COO) → report-agent",
+      "startName": "Head of Biz (COO)",
+      "endName": "report-agent",
+      "points": [
+        {
+          "x": -4.449615685869434,
+          "z": -2.0940417321649587
+        },
+        {
+          "x": -5.497426182730572,
+          "z": -1.1525417043451736
+        }
+      ],
+      "finalOrientation": -0.6289825669287304
+    },
+    {
+      "id": "route_1771519427396",
+      "name": "Head of Biz (COO) → pm-agent",
+      "startName": "Head of Biz (COO)",
+      "endName": "pm-agent",
+      "points": [
+        {
+          "x": -4.024720601820764,
+          "z": -1.6792328555801512
+        },
+        {
+          "x": -4.985438246326298,
+          "z": -0.8458392362500494
+        }
+      ],
+      "finalOrientation": -0.6151122092138135
+    },
+    {
+      "id": "route_1771519472629",
+      "name": "Head of Tech (CTO) → ui-agent",
+      "startName": "Head of Tech (CTO)",
+      "endName": "ui-agent",
+      "points": [
+        {
+          "x": -0.5394419145072239,
+          "z": -1.0092529840735356
+        },
+        {
+          "x": -1.1606288252116053,
+          "z": -0.616257183423825
+        }
+      ],
+      "finalOrientation": 0.008680208271868908
+    },
+    {
+      "id": "route_1771519487620",
+      "name": "Head of Tech (CTO) → ux-agent",
+      "startName": "Head of Tech (CTO)",
+      "endName": "ux-agent",
+      "points": [
+        {
+          "x": 0.08174499619715751,
+          "z": -1.0219302679654618
+        },
+        {
+          "x": 0.6395454874419082,
+          "z": -0.6035798995318988
+        }
+      ],
+      "finalOrientation": 0.12965222120366604
+    },
+    {
+      "id": "route_1771519500529",
+      "name": "Head of Tech (CTO) → codeur-agent",
+      "startName": "Head of Tech (CTO)",
+      "endName": "codeur-agent",
+      "points": [
+        {
+          "x": 0.08174499619715751,
+          "z": -0.9838984162896833
+        },
+        {
+          "x": 0.17048598344064056,
+          "z": 1.3487218198247284
+        }
+      ],
+      "finalOrientation": 0.9523382755858305
+    },
+    {
+      "id": "route_1771519511733",
+      "name": "Head of Tech (CTO) → debugger-agent",
+      "startName": "Head of Tech (CTO)",
+      "endName": "debugger-agent",
+      "points": [
+        {
+          "x": 0.06906771230523136,
+          "z": -1.0092529840735356
+        },
+        {
+          "x": -0.10841426218173475,
+          "z": 1.3233672520408761
+        }
+      ],
+      "finalOrientation": -0.09831222237000817
+    },
+    {
+      "id": "route_1771519532499",
+      "name": "Head of Tech (CTO) → media-tech-agent",
+      "startName": "Head of Tech (CTO)",
+      "endName": "media-tech-agent",
+      "points": [
+        {
+          "x": -0.55211919839915,
+          "z": -1.0219302679654618
+        },
+        {
+          "x": -0.6155056178587808,
+          "z": 1.3233672520408761
+        }
+      ],
+      "finalOrientation": -0.8574865497923545
+    },
+    {
+      "id": "route_1771519573314",
+      "name": "Head of Growth (MB) → trend-agent",
+      "startName": "Head of Growth (MB)",
+      "endName": "trend-agent",
+      "points": [
+        {
+          "x": 5.696949601712039,
+          "z": -4.251257889988092
+        },
+        {
+          "x": 7.465430704635738,
+          "z": -3.5666845598240795
+        }
+      ],
+      "finalOrientation": 0.8966694291867455
+    },
+    {
+      "id": "route_1771519584901",
+      "name": "Head of Growth (MB) → ads-agent",
+      "startName": "Head of Growth (MB)",
+      "endName": "ads-agent",
+      "points": [
+        {
+          "x": 5.715965527549928,
+          "z": -4.251257889988092
+        },
+        {
+          "x": 8.035908479772415,
+          "z": -3.947003076581864
+        }
+      ],
+      "finalOrientation": 0.8784276466265385
+    },
+    {
+      "id": "route_1771519610173",
+      "name": "Head of Personal (COS) → perso-agent",
+      "startName": "Head of Personal (COS)",
+      "endName": "perso-agent",
+      "points": [
+        {
+          "x": 4.176890441053874,
+          "z": -1.7905730798551258
+        },
+        {
+          "x": 6.489702421087151,
+          "z": -0.6591254925007167
+        }
+      ],
+      "finalOrientation": 0.14786907071217062
+    },
+    {
+      "id": "route_1771519623782",
+      "name": "Head of Personal (COS) → calendar-agent",
+      "startName": "Head of Personal (COS)",
+      "endName": "calendar-agent",
+      "points": [
+        {
+          "x": 4.160251505945721,
+          "z": -1.8072120149632789
+        },
+        {
+          "x": 7.138620890305122,
+          "z": -0.6092086871762575
+        }
+      ],
+      "finalOrientation": 0.15301767796299276
+    },
+    {
+      "id": "route_1771519655869",
+      "name": "Head of Security (CISO) → CEO",
+      "startName": "Head of Security (CISO)",
+      "endName": "CEO",
+      "points": [
+        {
+          "x": -5.859687012573592,
+          "z": -4.317431697602046
+        },
+        {
+          "x": -5.859687012573592,
+          "z": -3.862634137979196
+        },
+        {
+          "x": -5.271777972085516,
+          "z": -3.6407816698704885
+        },
+        {
+          "x": -0.3133753098559011,
+          "z": -3.840448891168325
+        }
+      ],
+      "finalOrientation": 3.0533972715389375
+    },
+    {
+      "id": "route_1771519678108",
+      "name": "Head of Biz (COO) → CEO",
+      "startName": "Head of Biz (COO)",
+      "endName": "CEO",
+      "points": [
+        {
+          "x": -4.0404967740821895,
+          "z": -1.6108315866758136
+        },
+        {
+          "x": -3.7631811889463047,
+          "z": -1.3667938717562351
+        },
+        {
+          "x": -3.3194762527288892,
+          "z": -1.3889791185671059
+        },
+        {
+          "x": -0.30228268645046574,
+          "z": -3.840448891168325
+        }
+      ],
+      "finalOrientation": 3.070685757197094
+    },
+    {
+      "id": "route_1771519698961",
+      "name": "Head of Tech (CTO) → CEO",
+      "startName": "Head of Tech (CTO)",
+      "endName": "CEO",
+      "points": [
+        {
+          "x": 0.041588639118031095,
+          "z": -1.0007372993768675
+        },
+        {
+          "x": 0.5185714455517525,
+          "z": -1.0562004164040444
+        },
+        {
+          "x": 0.7293312902550247,
+          "z": -1.3557012483507997
+        },
+        {
+          "x": 0.7515165370658955,
+          "z": -1.8104988079736504
+        },
+        {
+          "x": -0.28009743963959494,
+          "z": -3.7849857741411483
+        }
+      ],
+      "finalOrientation": 3.1082760316306413
+    },
+    {
+      "id": "route_1771519738407",
+      "name": "Head of Personal (COS) → CEO",
+      "startName": "Head of Personal (COS)",
+      "endName": "CEO",
+      "points": [
+        {
+          "x": 3.6245059990736594,
+          "z": -1.333516001539929
+        },
+        {
+          "x": 3.413746154370387,
+          "z": -1.0894782866203505
+        },
+        {
+          "x": 3.147523192639938,
+          "z": -0.9785520525659968
+        },
+        {
+          "x": -0.2468195694232888,
+          "z": -3.751707903924842
+        }
+      ],
+      "finalOrientation": -3.127576579377612
+    },
+    {
+      "id": "route_1771519767876",
+      "name": "Head of Growth (MB) → CEO",
+      "startName": "Head of Growth (MB)",
+      "endName": "CEO",
+      "points": [
+        {
+          "x": 5.530528291865522,
+          "z": -3.625323993490301
+        },
+        {
+          "x": 5.310604975653412,
+          "z": -3.289651563482343
+        },
+        {
+          "x": 4.951782722886285,
+          "z": -3.127602804168157
+        },
+        {
+          "x": 4.569810647359988,
+          "z": -3.0465784245110634
+        },
+        {
+          "x": -0.24535248654726644,
+          "z": -3.67162363900864
+        }
+      ],
+      "finalOrientation": -3.12714939348904
+    }
+  ]
+}

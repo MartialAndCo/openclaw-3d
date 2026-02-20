@@ -1,0 +1,897 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+
+/**
+ * SCALE: 1 unit = 1 meter
+ * Room: 24m wide x 12m deep x 4m tall
+ * OpenClaw HQ - 19 employees
+ * 1 CEO + 5 Heads + 13 Agents
+ */
+
+const DEPARTMENTS = [
+    {
+        name: 'Business',
+        head: { name: 'Head of Biz (COO)', role: 'COO' },
+        color: 0x3b82f6, // Blue
+        agents: [
+            { name: 'report-agent', role: 'Report' },
+            { name: 'pm-agent', role: 'PM' }
+        ]
+    },
+    {
+        name: 'Tech',
+        head: { name: 'Head of Tech (CTO)', role: 'CTO' },
+        color: 0x10b981, // Emerald
+        agents: [
+            { name: 'codeur-agent', role: 'Codeur' },
+            { name: 'debugger-agent', role: 'Debugger' },
+            { name: 'ui-agent', role: 'UI' },
+            { name: 'ux-agent', role: 'UX' },
+            { name: 'media-tech-agent', role: 'Media Tech' }
+        ]
+    },
+    {
+        name: 'Security',
+        head: { name: 'Head of Security (CISO)', role: 'CISO' },
+        color: 0xef4444, // Red
+        agents: [
+            { name: 'monitoring-agent', role: 'Monitoring' },
+            { name: 'backup-agent', role: 'Backup' }
+        ]
+    },
+    {
+        name: 'Personal',
+        head: { name: 'Head of Personal (COS)', role: 'COS' },
+        color: 0x8b5cf6, // Violet
+        agents: [
+            { name: 'perso-agent', role: 'Perso' },
+            { name: 'calendar-agent', role: 'Calendar' }
+        ]
+    },
+    {
+        name: 'Growth',
+        head: { name: 'Head of Growth (MB)', role: 'MB' },
+        color: 0xf59e0b, // Amber
+        agents: [
+            { name: 'trend-agent', role: 'Trend' },
+            { name: 'ads-agent', role: 'Ads' }
+        ]
+    }
+];
+
+const CEO = { name: 'CEO', role: 'Orchestrator', color: 0xf97316 }; // Orange
+
+const state = {
+    scene: null,
+    camera: null,
+    renderer: null,
+    controls: null,
+    clock: new THREE.Clock(),
+    mixers: [],
+    characters: [],
+    labels: [],
+    desks: [],
+    ceoChairPosition: null,
+    loadedCount: 0,
+    totalToLoad: 20 // 1 CEO + 19 employees
+};
+
+function updateLoadingProgress() {
+    state.loadedCount++;
+    console.log(`Loading progress: ${state.loadedCount} / ${state.totalToLoad}`);
+    
+    const progressText = document.querySelector('.loading-progress');
+    if (progressText) {
+        progressText.textContent = `${state.loadedCount} / ${state.totalToLoad} employees`;
+    }
+    
+    if (state.loadedCount >= state.totalToLoad) {
+        finishLoading();
+    }
+}
+
+function finishLoading() {
+    console.log('Loading complete!');
+    // Show canvas
+    const canvas = document.getElementById('canvas');
+    if (canvas) {
+        canvas.classList.add('visible');
+    }
+    
+    // Hide loading screen
+    setTimeout(() => {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+            loadingScreen.classList.add('hidden');
+        }
+    }, 500);
+}
+
+// Safety timeout - force finish after 10 seconds
+setTimeout(() => {
+    if (state.loadedCount < state.totalToLoad) {
+        console.warn(`Loading timeout! Only ${state.loadedCount}/${state.totalToLoad} loaded. Forcing finish.`);
+        finishLoading();
+    }
+}, 10000);
+
+function init() {
+    state.scene = new THREE.Scene();
+    state.scene.background = new THREE.Color(0xf0f2f5);
+
+    state.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+    // Camera in FRONT (positive Z), looking at CEO at Z=0
+    state.camera.position.set(0, 13, 8); 
+    state.camera.lookAt(0, 1, 0);
+
+    const canvas = document.getElementById('canvas');
+    state.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    state.renderer.setSize(window.innerWidth, window.innerHeight);
+    state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    state.renderer.shadowMap.enabled = true;
+    state.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    state.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    state.controls = new OrbitControls(state.camera, state.renderer.domElement);
+    state.controls.enableDamping = true;
+    state.controls.dampingFactor = 0.05;
+    state.controls.maxPolarAngle = Math.PI / 2.1;
+    state.controls.minDistance = 0.5;
+    state.controls.maxDistance = 80;
+    state.controls.target.set(0, 1, 0);
+
+    createLights();
+    createRoom();
+    createOfficeLayout();
+    createMeetingArea();
+    createLoungeArea();
+
+    // All 19 employees (CEO + 5 Heads + 13 Agents) are loaded by createCEOPlatform and createDeskInGroup
+    // No need to load separately - they are all seated at their desks
+
+    window.addEventListener('resize', onResize);
+    animate();
+
+    document.getElementById('info-status').textContent = 'OpenClaw HQ Active | 19 Employees';
+    document.getElementById('info-status').style.color = '#4ade80';
+}
+
+function createLights() {
+    state.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+    const sun = new THREE.DirectionalLight(0xfff5e0, 1.0);
+    sun.position.set(10, 15, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 60;
+    sun.shadow.camera.left = -12;
+    sun.shadow.camera.right = 12;
+    sun.shadow.camera.top = 6;
+    sun.shadow.camera.bottom = -6;
+    sun.shadow.bias = -0.001;
+    state.scene.add(sun);
+
+    const fill = new THREE.DirectionalLight(0xd0e8ff, 0.3);
+    fill.position.set(-8, 6, -5);
+    state.scene.add(fill);
+}
+
+function createRoom() {
+    // Floor 24m x 12m - Wood parquet flooring
+    const floorGroup = new THREE.Group();
+    
+    // Parquet parameters
+    const plankWidth = 0.15; // 15cm wide planks
+    const plankLength = 1.2; // 1.2m long planks
+    const roomWidth = 24;
+    const roomDepth = 12;
+    
+    // Wood colors for variety
+    const woodColors = [
+        0xd4c4a8, // Light oak
+        0xc9b896, // Medium oak
+        0xbea684, // Darker oak
+        0xd1c2a0, // Warm oak
+    ];
+    
+    const plankMat = new THREE.MeshStandardMaterial({ 
+        color: 0xffffff,
+        roughness: 0.6,
+        metalness: 0.0
+    });
+    
+    // Calculate number of planks
+    const planksX = Math.ceil(roomWidth / plankLength);
+    const planksZ = Math.ceil(roomDepth / plankWidth);
+    
+    // Create planks in herringbone or standard pattern (standard here)
+    for (let x = 0; x < planksX; x++) {
+        for (let z = 0; z < planksZ; z++) {
+            // Offset every other row for realistic flooring
+            const xOffset = (z % 2 === 0) ? 0 : plankLength / 2;
+            const actualX = (x * plankLength) - roomWidth/2 + xOffset;
+            const actualZ = (z * plankWidth) - roomDepth/2;
+            
+            // Create plank
+            const plankGeo = new THREE.BoxGeometry(plankLength - 0.002, 0.02, plankWidth - 0.002);
+            const plankColor = woodColors[(x + z) % woodColors.length];
+            const plank = new THREE.Mesh(
+                plankGeo,
+                new THREE.MeshStandardMaterial({ 
+                    color: plankColor,
+                    roughness: 0.6,
+                    metalness: 0.0
+                })
+            );
+            
+            plank.position.set(actualX + plankLength/2, 0.01, actualZ + plankWidth/2);
+            plank.receiveShadow = true;
+            plank.castShadow = true;
+            floorGroup.add(plank);
+        }
+    }
+    
+    // Add a thin base layer below planks
+    const baseFloor = new THREE.Mesh(
+        new THREE.PlaneGeometry(roomWidth, roomDepth),
+        new THREE.MeshStandardMaterial({ color: 0x8b7355, roughness: 0.9 })
+    );
+    baseFloor.rotation.x = -Math.PI / 2;
+    baseFloor.position.y = 0;
+    baseFloor.receiveShadow = true;
+    floorGroup.add(baseFloor);
+    
+    state.scene.add(floorGroup);
+
+    const grid = new THREE.GridHelper(24, 24, 0xbbbbbb, 0xbbbbbb);
+    grid.position.y = 0.005;
+    grid.material.opacity = 0.15;
+    grid.material.transparent = true;
+    state.scene.add(grid);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.6 });
+    
+    // Back wall (behind camera, at positive Z) - with door opening
+    // Door dimensions: 1.2m wide x 2.2m tall, positioned at center
+    const doorWidth = 1.2;
+    const doorHeight = 2.2;
+    const wallWidth = 24;
+    const wallHeight = 4;
+    const wallZ = 6;
+    
+    // Left segment of back wall
+    const backWallSegmentWidth = (wallWidth - doorWidth) / 2;
+    const backLeftWall = new THREE.Mesh(
+        new THREE.BoxGeometry(backWallSegmentWidth, wallHeight, 0.15), 
+        wallMat
+    );
+    backLeftWall.position.set(-(wallWidth/2 - backWallSegmentWidth/2), wallHeight/2, wallZ);
+    backLeftWall.receiveShadow = true;
+    backLeftWall.castShadow = true;
+    state.scene.add(backLeftWall);
+    
+    // Right segment of back wall
+    const backRightWall = new THREE.Mesh(
+        new THREE.BoxGeometry(backWallSegmentWidth, wallHeight, 0.15), 
+        wallMat
+    );
+    backRightWall.position.set((wallWidth/2 - backWallSegmentWidth/2), wallHeight/2, wallZ);
+    backRightWall.receiveShadow = true;
+    backRightWall.castShadow = true;
+    state.scene.add(backRightWall);
+    
+    // Lintel (above door)
+    const lintelHeight = wallHeight - doorHeight;
+    const lintel = new THREE.Mesh(
+        new THREE.BoxGeometry(doorWidth, lintelHeight, 0.15),
+        wallMat
+    );
+    lintel.position.set(0, doorHeight + lintelHeight/2, wallZ);
+    lintel.receiveShadow = true;
+    lintel.castShadow = true;
+    state.scene.add(lintel);
+    
+    // Door frame
+    const frameThickness = 0.08;
+    const frameDepth = 0.18;
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.4 });
+    
+    // Left frame
+    const leftFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(frameThickness, doorHeight, frameDepth),
+        frameMat
+    );
+    leftFrame.position.set(-doorWidth/2 + frameThickness/2, doorHeight/2, wallZ);
+    leftFrame.castShadow = true;
+    state.scene.add(leftFrame);
+    
+    // Right frame
+    const rightFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(frameThickness, doorHeight, frameDepth),
+        frameMat
+    );
+    rightFrame.position.set(doorWidth/2 - frameThickness/2, doorHeight/2, wallZ);
+    rightFrame.castShadow = true;
+    state.scene.add(rightFrame);
+    
+    // Top frame
+    const topFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(doorWidth + frameThickness*2, frameThickness, frameDepth),
+        frameMat
+    );
+    topFrame.position.set(0, doorHeight - frameThickness/2, wallZ);
+    topFrame.castShadow = true;
+    state.scene.add(topFrame);
+    
+    // Door panel (slightly recessed)
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.5 });
+    const doorPanel = new THREE.Mesh(
+        new THREE.BoxGeometry(doorWidth - 0.05, doorHeight - frameThickness, 0.06),
+        doorMat
+    );
+    doorPanel.position.set(0, (doorHeight - frameThickness)/2, wallZ - 0.04);
+    doorPanel.castShadow = true;
+    doorPanel.receiveShadow = true;
+    state.scene.add(doorPanel);
+    
+    // Door handle
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.2 });
+    const handle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.04),
+        handleMat
+    );
+    handle.position.set(0.4, doorHeight/2, wallZ - 0.02);
+    state.scene.add(handle);
+
+    // Left wall
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 12), wallMat);
+    leftWall.position.set(-12, 2, 0);
+    leftWall.receiveShadow = true;
+    state.scene.add(leftWall);
+
+    // Right wall
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 12), wallMat);
+    rightWall.position.set(12, 2, 0);
+    rightWall.receiveShadow = true;
+    state.scene.add(rightWall);
+
+    // Plants in corners (adjusted for smaller room)
+    createPlant(-11, 0, -5);
+    createPlant(11, 0, -5);
+    createPlant(-11, 0, 5);
+    createPlant(11, 0, 5);
+}
+
+function createOfficeLayout() {
+    // CEO at FRONT (open side)
+    // Employees in ARC near door (back)
+    
+    createCEOPlatform(0, 0, 2);
+
+    // 5 pods in clean ARC near door
+    const podConfigs = [
+        { x: -6, z: -3 },   // Business - left
+        { x: -3, z: -4 },   // Tech - left-center  
+        { x: 0, z: -5 },    // Security - center (closest to door)
+        { x: 3, z: -4 },    // Personal - right-center
+        { x: 6, z: -3 }     // Growth - right
+    ];
+
+    DEPARTMENTS.forEach((dept, index) => {
+        const config = podConfigs[index];
+        createCompactPodSimple(config.x, config.z, dept);
+    });
+}
+
+function createCEOPlatform(x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    // NO PLATFORM - CEO desk at floor level
+    // CEO Desk at ground level
+    const deskY = 0.75;
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.3 });
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(2, 0.06, 1.2), deskMat);
+    desk.position.y = deskY;
+    desk.castShadow = true;
+    desk.receiveShadow = true;
+    group.add(desk);
+
+    // Desk legs
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, metalness: 0.3, roughness: 0.5 });
+    const legPositions = [[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]];
+    legPositions.forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.75, 0.08), legMat);
+        leg.position.set(lx, 0.375, lz);
+        group.add(leg);
+    });
+
+    // Chair - CEO now faces his desk like everyone else
+    const chairZ = 0.7; // Behind desk (positive Z), CEO faces -Z toward desk
+    createExecutiveChair(group, 0, 0, chairZ);
+    
+    // Load CEO seated employee - same as others now
+    loadSeatedEmployeeAtDesk(group, chairZ, 'CEO');
+
+    // Monitors on desk
+    const screenMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a });
+    const screen1 = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.02), screenMat);
+    screen1.position.set(-0.4, deskY + 0.35, 0.35); // facing CEO
+    group.add(screen1);
+    
+    const screen2 = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.02), screenMat);
+    screen2.position.set(0.4, deskY + 0.35, 0.35); // facing CEO
+    group.add(screen2);
+
+    createLabel(x, 2.2, z, 'CEO - Orchestrator', 0xf97316);
+
+    state.scene.add(group);
+
+    state.desks.push({
+        position: { x, y: deskY, z },
+        occupant: CEO,
+        type: 'CEO'
+    });
+}
+
+function createCompactPodSimple(x, z, dept) {
+    // Clean pod layout: Head at front (toward CEO), agents behind
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    // HEAD desk - facing CEO (positive Z)
+    createDeskInGroup(group, 0, 0, 0, dept.head, dept.color, true, dept);
+    createLabel(x, 2.5, z, `${dept.name} - ${dept.head.role}`, dept.color);
+
+    // AGENT desks - arranged BEHIND head (further from CEO)
+    const agentCount = dept.agents.length;
+    
+    if (agentCount <= 2) {
+        // Side by side behind head
+        dept.agents.forEach((agent, i) => {
+            const offsetX = (i === 0 ? -1.2 : 1.2);
+            createDeskInGroup(group, offsetX, 0, -2, agent, dept.color, false, dept);
+        });
+    } else {
+        // Grid 2xN behind head
+        dept.agents.forEach((agent, i) => {
+            const row = Math.floor(i / 2) + 1; // Start at row 1 (behind head)
+            const col = i % 2;
+            const offsetX = (col === 0 ? -1.2 : 1.2);
+            const offsetZ = -row * 2;
+            createDeskInGroup(group, offsetX, 0, offsetZ, agent, dept.color, false, dept);
+        });
+    }
+
+    state.scene.add(group);
+}
+
+function createDeskInGroup(group, x, y, z, occupant, color, isHead, dept) {
+    const deskGroup = new THREE.Group();
+    deskGroup.position.set(x, y, z);
+
+    // Desk dimensions
+    const deskWidth = isHead ? 1.6 : 1.3;
+    const deskDepth = isHead ? 0.8 : 0.65;
+
+    // Desktop
+    const topMat = new THREE.MeshStandardMaterial({ 
+        color: isHead ? 0xf5f0e8 : 0xffffff,
+        roughness: 0.5 
+    });
+    const top = new THREE.Mesh(
+        new THREE.BoxGeometry(deskWidth, 0.05, deskDepth),
+        topMat
+    );
+    top.position.y = 0.75;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    deskGroup.add(top);
+
+    // Legs
+    const legMat = new THREE.MeshStandardMaterial({ 
+        color: 0x444444, 
+        metalness: 0.6, 
+        roughness: 0.3 
+    });
+    const legX = deskWidth / 2 - 0.1;
+    const legZ = deskDepth / 2 - 0.1;
+    [[-legX, -legZ], [legX, -legZ], [-legX, legZ], [legX, legZ]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.75, 0.04), legMat);
+        leg.position.set(lx, 0.375, lz);
+        leg.castShadow = true;
+        deskGroup.add(leg);
+    });
+
+    // Monitor
+    const screenSize = isHead ? 0.5 : 0.4;
+    const screen = new THREE.Mesh(
+        new THREE.BoxGeometry(screenSize, screenSize * 0.6, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x111111 })
+    );
+    screen.position.set(0, 1.05, -deskDepth / 3);
+    deskGroup.add(screen);
+
+    // Monitor stand
+    const stand = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.03, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x333333 })
+    );
+    stand.position.set(0, 0.875, -deskDepth / 3);
+    deskGroup.add(stand);
+
+    // Chair - BEHIND desk (positive Z), employee faces the monitors (negative Z)
+    const chairZ = deskDepth / 2 + 0.25; // Behind desk
+    createOfficeChair(deskGroup, 0, 0, chairZ, color);
+    
+    // Load seated employee attached to deskGroup
+    // Employee is on chair, facing toward desk (negative Z direction)
+    loadSeatedEmployeeAtDesk(deskGroup, chairZ, occupant.name);
+
+    // Small name plate on desk
+    const plateMat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.3 });
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 0.08), plateMat);
+    plate.position.set(0.4, 0.78, deskDepth / 2 - 0.08);
+    deskGroup.add(plate);
+
+    group.add(deskGroup);
+
+    // Register desk
+    state.desks.push({
+        position: { 
+            x: group.position.x + x, 
+            y: 0.75, 
+            z: group.position.z + z 
+        },
+        occupant: occupant,
+        department: dept
+    });
+}
+
+function createOfficeChair(group, x, y, z, color) {
+    const chairMat = new THREE.MeshStandardMaterial({ 
+        color: color,
+        roughness: 0.7 
+    });
+
+    // Seat
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.06, 0.45), chairMat);
+    seat.position.set(x, y + 0.5, z);
+    group.add(seat);
+
+    // Back
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.5, 0.05), chairMat);
+    back.position.set(x, y + 0.75, z + 0.2);
+    group.add(back);
+
+    // Base
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.04, 5),
+        new THREE.MeshStandardMaterial({ color: 0x333333 })
+    );
+    base.position.set(x, y + 0.02, z);
+    group.add(base);
+
+    // Stem
+    const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.035, 0.45),
+        new THREE.MeshStandardMaterial({ color: 0x666666 })
+    );
+    stem.position.set(x, y + 0.25, z);
+    group.add(stem);
+}
+
+function createExecutiveChair(group, x, y, z) {
+    const chairMat = new THREE.MeshStandardMaterial({ 
+        color: 0x3d2817, // Dark executive leather
+        roughness: 0.5 
+    });
+
+    // Seat (wider)
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.08, 0.65), chairMat);
+    seat.position.set(x, y + 0.5, z);
+    group.add(seat);
+
+    // Back (taller)
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.7, 0.08), chairMat);
+    back.position.set(x, y + 0.85, z + 0.28);
+    group.add(back);
+
+    // Armrests
+    [-0.35, 0.35].forEach(ax => {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.4), chairMat);
+        arm.position.set(x + ax, y + 0.7, z);
+        group.add(arm);
+        const support = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.18, 0.04), chairMat);
+        support.position.set(x + ax, y + 0.6, z + 0.15);
+        group.add(support);
+    });
+
+    // Base
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.28, 0.04, 5),
+        new THREE.MeshStandardMaterial({ color: 0x222222 })
+    );
+    base.position.set(x, y + 0.02, z);
+    group.add(base);
+
+    // Stem
+    const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.45),
+        new THREE.MeshStandardMaterial({ color: 0x444444 })
+    );
+    stem.position.set(x, y + 0.25, z);
+    group.add(stem);
+}
+
+function createMeetingArea() {
+    // War Room - back left
+    const group = new THREE.Group();
+    group.position.set(-10, 0, -6);
+
+    // Smaller table
+    const tableTop = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.2, 0.05, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 })
+    );
+    tableTop.position.y = 0.75;
+    tableTop.castShadow = true;
+    tableTop.receiveShadow = true;
+    group.add(tableTop);
+
+    const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.25, 0.3, 0.75),
+        new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.5 })
+    );
+    leg.position.y = 0.375;
+    group.add(leg);
+
+    // 6 chairs
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 4) * Math.PI * 2;
+        const cx = Math.cos(angle) * 1.6;
+        const cz = Math.sin(angle) * 1.6;
+        createOfficeChair(group, cx, 0, cz, 0x888888);
+    }
+
+    state.scene.add(group);
+    createLabel(-10, 2, -6, 'War Room', 0x666666);
+}
+
+function createLoungeArea() {
+    // Coffee area - back right
+    const group = new THREE.Group();
+    group.position.set(10, 0, -6);
+
+    // Small coffee table
+    const table = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.6, 0.6, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x333333 })
+    );
+    table.position.y = 0.35;
+    table.castShadow = true;
+    group.add(table);
+
+    // Simple legs
+    [0, Math.PI/2, Math.PI, -Math.PI/2].forEach(angle => {
+        const lx = Math.cos(angle) * 0.4;
+        const lz = Math.sin(angle) * 0.4;
+        const leg = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.025, 0.025, 0.35),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
+        );
+        leg.position.set(lx, 0.175, lz);
+        group.add(leg);
+    });
+
+    // Small sofa
+    const sofa = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 0.35, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x4a5568, roughness: 0.9 })
+    );
+    sofa.position.set(0, 0.175, -0.8);
+    sofa.castShadow = true;
+    group.add(sofa);
+
+    // Coffee machine
+    const machine = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.4, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x111111 })
+    );
+    machine.position.set(-0.8, 0.2, -0.8);
+    group.add(machine);
+
+    state.scene.add(group);
+    createLabel(10, 2, -6, 'Coffee Corner', 0x8b5cf6);
+}
+
+function createPlant(x, y, z) {
+    const group = new THREE.Group();
+    group.position.set(x, y, z);
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914 }));
+    pot.position.y = 0.15;
+    group.add(pot);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x2d8a2d }));
+    leaves.position.y = 0.55;
+    group.add(leaves);
+    state.scene.add(group);
+}
+
+function createLabel(x, y, z, text, color) {
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'dept-label';
+    labelDiv.innerHTML = `<span style="color: #${color.toString(16).padStart(6, '0')}">●</span> ${text}`;
+    document.getElementById('labels-container').appendChild(labelDiv);
+
+    state.labels.push({
+        element: labelDiv,
+        position: new THREE.Vector3(x, y, z)
+    });
+}
+
+function loadCharacter(url, position, label) {
+    const loader = new GLTFLoader();
+
+    loader.load(url, (gltf) => {
+        const model = gltf.scene;
+        model.scale.setScalar(1.0);
+        model.position.set(position.x, 0, position.z);
+
+        // Keep ALL original materials intact
+        model.traverse((o) => {
+            if (!o.isMesh) return;
+            const n = o.name.toLowerCase();
+            if (n.includes('shadow') || n.includes('blob') || n.includes('decal')) {
+                o.visible = false;
+                return;
+            }
+
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach(mat => {
+                if (!mat) return;
+                mat.transparent = false;
+                mat.alphaTest = 0;
+                mat.depthWrite = true;
+                mat.side = THREE.FrontSide;
+                mat.needsUpdate = true;
+            });
+
+            o.castShadow = true;
+            o.receiveShadow = true;
+        });
+
+        state.scene.add(model);
+        state.characters.push(model);
+
+        if (gltf.animations.length > 0) {
+            const mixer = new THREE.AnimationMixer(model);
+            const clip = gltf.animations.find(c => /walk/i.test(c.name))
+                || gltf.animations.find(c => /run/i.test(c.name))
+                || gltf.animations[0];
+            mixer.clipAction(clip).play();
+            state.mixers.push(mixer);
+        }
+
+    }, undefined, (err) => {
+        console.error('[Character] Load error:', err);
+    });
+}
+
+function loadSeatedEmployeeAtDesk(parentGroup, chairZ, name) {
+    const loader = new FBXLoader();
+
+    loader.load('Seated Idle.fbx', (fbx) => {
+        const model = fbx;
+        model.scale.setScalar(0.01); // FBX scale
+        
+        // Position relative to parent (same as chair)
+        model.position.set(0, 0.54 - 0.5, chairZ); // Y adjusted for seat height
+        
+        // Face the desk (180° from chair direction which is -Z)
+        // Chair faces -Z (toward desk), so employee faces +Z ? 
+        // Actually chair back is at +Z, so employee sits facing -Z (toward desk)
+        // But we want employee to face the desk monitors
+        // Desk is at local (0,0,0), chair at (0,0,chairZ) with chairZ negative
+        // So chair is in front of desk, employee should face toward desk = +Z
+        // Employee faces AWAY from desk (toward +Z) - reversed
+        model.rotation.y = Math.PI; // Face +Z (away from desk)
+
+        // Fix materials
+        model.traverse((o) => {
+            if (!o.isMesh) return;
+            
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach(mat => {
+                if (!mat) return;
+                mat.transparent = false;
+                mat.alphaTest = 0;
+                mat.depthWrite = true;
+                mat.side = THREE.FrontSide;
+                mat.needsUpdate = true;
+            });
+
+            o.castShadow = true;
+            o.receiveShadow = true;
+        });
+
+        parentGroup.add(model);
+
+        // Play sitting animation
+        if (fbx.animations && fbx.animations.length > 0) {
+            const mixer = new THREE.AnimationMixer(model);
+            const action = mixer.clipAction(fbx.animations[0]);
+            action.play();
+            state.mixers.push(mixer);
+        }
+
+        console.log(`[Employee] ${name} seated`);
+        updateLoadingProgress();
+
+    }, undefined, (err) => {
+        console.error(`[Employee] ${name} load error:`, err);
+        updateLoadingProgress(); // Count even if error
+    });
+}
+
+function onResize() {
+    state.camera.aspect = window.innerWidth / window.innerHeight;
+    state.camera.updateProjectionMatrix();
+    state.renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function updateLabels() {
+    if (!state.camera) return;
+
+    state.labels.forEach(label => {
+        const screenPos = label.position.clone().project(state.camera);
+        const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+        
+        // Hide if behind camera
+        if (screenPos.z > 1) {
+            label.element.style.opacity = '0';
+        } else {
+            label.element.style.opacity = '1';
+            label.element.style.left = `${x}px`;
+            label.element.style.top = `${y}px`;
+        }
+    });
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = state.clock.getDelta();
+    const time = state.clock.getElapsedTime();
+
+    state.controls.update();
+    state.mixers.forEach(m => m.update(delta));
+
+    // Animate characters
+    state.characters.forEach((char, index) => {
+        const speed = 0.3 + index * 0.05;
+        const rx = 8 + index * 2;
+        const rz = 6 + index;
+        const offset = index * 1.5;
+        
+        char.position.x = Math.cos(time * speed + offset) * rx;
+        char.position.z = Math.sin(time * speed + offset) * rz;
+        char.position.y = 0;
+        
+        // Face direction of travel
+        char.rotation.y = Math.atan2(
+            Math.sin(time * speed + offset),
+            Math.cos(time * speed + offset)
+        ) + Math.PI;
+    });
+
+    updateLabels();
+    state.renderer.render(state.scene, state.camera);
+}
+
+init();

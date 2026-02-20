@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenClaw — Office Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="loading-title">OpenClaw HQ</div>
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading office...</div>
+      <div class="loading-progress">Checking activity...</div>
+    </div>
+  </div>
+
+  <div id="labels-container"></div>
+  <div id="info-panel">
+    <div id="info-title">OpenClaw HQ</div>
+    <div id="info-status">Initializing...</div>
+  </div>
+  <canvas id="canvas"></canvas>
+  <script>
+    window.onerror = function (msg, url, line, col, error) {
+      const status = document.getElementById('info-status');
+      if (status) {
+        status.textContent = "Error: " + msg;
+        status.style.color = "#ff5555";
+      }
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function (event) {
+      const status = document.getElementById('info-status');
+      if (status) {
+        status.textContent = "Error: " + event.reason;
+        status.style.color = "#ff5555";
+      }
+    });
+  </script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+
+</html>

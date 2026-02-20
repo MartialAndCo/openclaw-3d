@@ -1,0 +1,260 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/**
+ * SCALE: 1 unit = 1 meter
+ * Room: 30m wide x 20m deep x 4m tall
+ * Desk: 1.6m wide x 0.75m tall
+ * Character: scale = 1.0 (model is in meters)
+ */
+
+const state = {
+    scene: null,
+    camera: null,
+    renderer: null,
+    controls: null,
+    clock: new THREE.Clock(),
+    mixers: [],
+    character: null,
+    charBaseY: 0
+};
+
+function init() {
+    state.scene = new THREE.Scene();
+    state.scene.background = new THREE.Color(0xf0f2f5);
+
+    state.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+    state.camera.position.set(20, 15, 20);
+    state.camera.lookAt(0, 0, 0);
+
+    const canvas = document.getElementById('canvas');
+    state.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    state.renderer.setSize(window.innerWidth, window.innerHeight);
+    state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    state.renderer.shadowMap.enabled = true;
+    state.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    state.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // No tone mapping override — keep defaults so scene colors look natural
+
+    state.controls = new OrbitControls(state.camera, state.renderer.domElement);
+    state.controls.enableDamping = true;
+    state.controls.dampingFactor = 0.05;
+    state.controls.maxPolarAngle = Math.PI / 2.1;
+    state.controls.minDistance = 0.5;
+    state.controls.maxDistance = 60;
+    state.controls.target.set(0, 1, 0);
+
+    createLights();
+    createRoom();
+    createDesk(-5, 0, -6);
+    createDesk(3, 0, -6);
+    createDesk(-5, 0, 2);
+    createDesk(3, 0, 2);
+
+    loadCharacter('mr_man_walking_fixed.glb');
+
+    window.addEventListener('resize', onResize);
+    animate();
+
+    document.getElementById('info-status').textContent = 'Ready';
+    document.getElementById('info-status').style.color = '#4ade80';
+}
+
+function createLights() {
+    state.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+    const sun = new THREE.DirectionalLight(0xfff5e0, 1.0);
+    sun.position.set(10, 15, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 60;
+    sun.shadow.camera.left = -20;
+    sun.shadow.camera.right = 20;
+    sun.shadow.camera.top = 20;
+    sun.shadow.camera.bottom = -20;
+    sun.shadow.bias = -0.001;
+    state.scene.add(sun);
+
+    const fill = new THREE.DirectionalLight(0xd0e8ff, 0.3);
+    fill.position.set(-8, 6, -5);
+    state.scene.add(fill);
+}
+
+function createRoom() {
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(30, 20),
+        new THREE.MeshStandardMaterial({ color: 0xd4c5a9, roughness: 0.9 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    state.scene.add(floor);
+
+    const grid = new THREE.GridHelper(30, 30, 0xbbbbbb, 0xbbbbbb);
+    grid.position.y = 0.005;
+    grid.material.opacity = 0.25;
+    grid.material.transparent = true;
+    state.scene.add(grid);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.6 });
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(30, 4, 0.15), wallMat);
+    backWall.position.set(0, 2, -10);
+    backWall.receiveShadow = true;
+    state.scene.add(backWall);
+
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 20), wallMat);
+    leftWall.position.set(-15, 2, 0);
+    leftWall.receiveShadow = true;
+    state.scene.add(leftWall);
+
+    createPlant(-14, 0, -9);
+    createPlant(14, 0, -9);
+    createPlant(-14, 0, 9);
+}
+
+function createDesk(x, y, z) {
+    const group = new THREE.Group();
+    group.position.set(x, y, z);
+
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.5 });
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 0.8), topMat);
+    top.position.y = 0.75;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    group.add(top);
+
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.8, roughness: 0.3 });
+    [[-0.75, 0, -0.35], [0.75, 0, -0.35], [-0.75, 0, 0.35], [0.75, 0, 0.35]].forEach(([lx, ly, lz]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.75, 0.05), legMat);
+        leg.position.set(lx, 0.375, lz);
+        leg.castShadow = true;
+        group.add(leg);
+    });
+
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    screen.position.set(0, 1.1, -0.3);
+    group.add(screen);
+
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5 }));
+    stand.position.set(0, 0.9, -0.3);
+    group.add(stand);
+
+    const chairMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+    const chairSeat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.5), chairMat);
+    chairSeat.position.set(0, 0.5, 0.5);
+    group.add(chairSeat);
+    const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.05), chairMat);
+    chairBack.position.set(0, 0.75, 0.75);
+    group.add(chairBack);
+
+    state.scene.add(group);
+}
+
+function createPlant(x, y, z) {
+    const group = new THREE.Group();
+    group.position.set(x, y, z);
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914 }));
+    pot.position.y = 0.15;
+    group.add(pot);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x2d8a2d }));
+    leaves.position.y = 0.55;
+    group.add(leaves);
+    state.scene.add(group);
+}
+
+function loadCharacter(url) {
+    const loader = new GLTFLoader();
+    document.getElementById('info-status').textContent = 'Loading character...';
+
+    loader.load(url, (gltf) => {
+        const model = gltf.scene;
+        model.scale.setScalar(1.0);
+        model.position.set(0, 0, 0);
+        state.charBaseY = 0;
+
+        // Keep ALL original materials intact (they have textures/colors)
+        // Just enable shadows and hide baked shadow planes
+        model.traverse((o) => {
+            if (!o.isMesh) return;
+            const n = o.name.toLowerCase();
+            if (n.includes('shadow') || n.includes('blob') || n.includes('decal')) {
+                o.visible = false;
+                return;
+            }
+
+            // Force opaque rendering — fixes see-through/transparency artifacts
+            // from the material conversion
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach(mat => {
+                if (!mat) return;
+                mat.transparent = false;
+                mat.alphaTest = 0;
+                mat.depthWrite = true;
+                mat.side = THREE.FrontSide;
+                mat.needsUpdate = true;
+            });
+
+            o.castShadow = true;
+            o.receiveShadow = true;
+        });
+
+        state.scene.add(model);
+        state.character = model;
+
+        if (gltf.animations.length > 0) {
+            const mixer = new THREE.AnimationMixer(model);
+            const clip = gltf.animations.find(c => /walk/i.test(c.name))
+                || gltf.animations.find(c => /run/i.test(c.name))
+                || gltf.animations[0];
+            mixer.clipAction(clip).play();
+            state.mixers.push(mixer);
+        }
+
+        document.getElementById('info-status').textContent = 'Active | Employee #1';
+        document.getElementById('info-status').style.color = '#4ade80';
+
+    }, undefined, (err) => {
+        console.error('[Character] Load error:', err);
+        document.getElementById('info-status').textContent = 'Error loading model';
+        document.getElementById('info-status').style.color = '#ff5555';
+    });
+}
+
+function onResize() {
+    state.camera.aspect = window.innerWidth / window.innerHeight;
+    state.camera.updateProjectionMatrix();
+    state.renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = state.clock.getDelta();
+    const time = state.clock.getElapsedTime();
+
+    state.controls.update();
+    state.mixers.forEach(m => m.update(delta));
+
+    if (state.character) {
+        const speed = 0.4;
+        const rx = 6;
+        const rz = 4;
+        state.character.position.x = Math.cos(time * speed) * rx;
+        state.character.position.z = Math.sin(time * speed) * rz;
+        state.character.position.y = state.charBaseY;
+        // Face direction of travel
+        state.character.rotation.y = Math.atan2(
+            Math.sin(time * speed),
+            Math.cos(time * speed)
+        ) + Math.PI;
+    }
+
+    state.renderer.render(state.scene, state.camera);
+}
+
+init();
