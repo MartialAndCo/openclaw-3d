@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { state, setTotalEmployees } from './state.js';
+import { state, setTotalEmployees, updateLoadingProgress } from './state.js';
 import { createLights } from './scene/lights.js';
 import { createRoom } from './scene/room.js';
 import { createOfficeLayout } from './scene/furniture.js';
@@ -140,34 +140,37 @@ function loadPredefinedRoutes() {
  */
 function initRealtimeSystem() {
     console.log('[Main] Initialisation du système temps réel...');
-    
+
     // 1. Connecter les écrans aux données temps réel
     bindToRealtimeData();
-    
+
+    // Démarrer le polling vers le serveur proxy local Python
+    gateway.startPolling();
+
     // 2. Initialiser le tracker de délégations
     delegationTracker.initialize();
-    
+
     // 3. Initialiser le gestionnaire de présence
     presenceManager.initialize();
-    
+
     // 4. Charger les agents actifs au démarrage
     loadActiveAgentsOnStartup();
-    
+
     // 5. Écouter les mises à jour de données
     gateway.on('data-updated', (data) => {
         console.log('[Main] Données mises à jour:', data);
     });
-    
+
     gateway.on('interaction-detected', (interaction) => {
         console.log('[Main] Interaction détectée:', interaction);
     });
-    
+
     // 6. Exposer des commandes debug
     window._gateway = gateway;
     window._delegationTracker = delegationTracker;
     window._dataAdapter = dataAdapter;
     window._presenceManager = presenceManager;
-    
+
     console.log('[Main] Système temps réel prêt');
     console.log('[Debug] Commandes disponibles:');
     console.log('  - _delegationTracker.forceDelegation(from, to)');
@@ -181,30 +184,30 @@ function initRealtimeSystem() {
  */
 async function loadActiveAgentsOnStartup() {
     console.log('[Main] Vérification des agents actifs...');
-    
+
     try {
         // Récupérer les sessions actives (dernières 30 min)
         const activeSessions = await gateway.fetchActiveSessions();
         console.log('[Main] Sessions actives:', activeSessions);
-        
+
         // Agents à charger au démarrage
         const agentsToLoad = new Set();
-        
+
         // Toujours charger CEO et les 5 Heads
         agentsToLoad.add('CEO');
-        const heads = ['Head of Biz (COO)', 'Head of Tech (CTO)', 'Head of Security (CISO)', 
-                       'Head of Personal (COS)', 'Head of Growth (MB)'];
+        const heads = ['Head of Biz (COO)', 'Head of Tech (CTO)', 'Head of Security (CISO)',
+            'Head of Personal (COS)', 'Head of Growth (MB)'];
         heads.forEach(h => agentsToLoad.add(h));
-        
+
         // Ajouter les agents actifs des sessions
         activeSessions.forEach(session => {
             if (session.agentName) {
                 agentsToLoad.add(session.agentName);
             }
         });
-        
+
         console.log(`[Main] ${agentsToLoad.size} agents à charger:`, [...agentsToLoad]);
-        
+
         // Charger chaque agent actif
         let loadedCount = 0;
         agentsToLoad.forEach(agentName => {
@@ -217,16 +220,16 @@ async function loadActiveAgentsOnStartup() {
                 if (success) loadedCount++;
             }
         });
-        
+
         // Mettre à jour le total pour le loading screen
         setTotalEmployees(agentsToLoad.size);
-        
+
         // Mettre à jour le statut
-        document.getElementById('info-status').textContent = 
+        document.getElementById('info-status').textContent =
             `OpenClaw HQ Active | ${loadedCount} Employees (${loadedCount - 6} active agents)`;
-        
+
         console.log(`[Main] ${loadedCount} agents chargés au démarrage`);
-        
+
     } catch (error) {
         console.error('[Main] Erreur lors du chargement des agents actifs:', error);
         // Fallback: charger juste CEO + Heads
@@ -239,12 +242,12 @@ async function loadActiveAgentsOnStartup() {
  */
 function loadMinimalStaff() {
     console.log('[Main] Chargement du staff minimal...');
-    
-    const heads = ['Head of Biz (COO)', 'Head of Tech (CTO)', 'Head of Security (CISO)', 
-                   'Head of Personal (COS)', 'Head of Growth (MB)'];
-    
+
+    const heads = ['Head of Biz (COO)', 'Head of Tech (CTO)', 'Head of Security (CISO)',
+        'Head of Personal (COS)', 'Head of Growth (MB)'];
+
     setTotalEmployees(6); // CEO + 5 Heads
-    
+
     heads.forEach(headName => {
         presenceManager.spawnAgent(headName);
     });

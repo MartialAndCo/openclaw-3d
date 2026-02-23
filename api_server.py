@@ -1,225 +1,144 @@
-#!/usr/bin/env python3
-"""
-API Server for OpenClaw Dashboard
-Serves real data from the OpenClaw workspace
-"""
-
-import http.server
-import socketserver
-import json
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import requests
 import os
-import glob
-from datetime import datetime, timedelta
+import time
+import threading
 
-PORT = 8081
-WORKSPACE = "/home/ubuntu/.openclaw/workspace"
+app = Flask(__name__)
+CORS(app)
 
-class APIHandler(http.server.SimpleHTTPRequestHandler):
-    def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        super().end_headers()
+# Configuration based on ~/.openclaw/config.json found on the server
+GATEWAY_URL = "http://100.101.199.17:34871"  # Target the Tailscale IP of the Ubuntu server
+GATEWAY_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "fb43d812f2c46dc15cb2f9b1d05f9dfae4c10488d1f7e06f")
+HEADERS = {
+    "Authorization": f"Bearer {GATEWAY_TOKEN}",
+    "Content-Type": "application/json"
+}
 
-    def do_GET(self):
-        if self.path == '/api/memory':
-            self.serve_memory()
-        elif self.path == '/api/sessions':
-            self.serve_sessions()
-        elif self.path == '/api/crons':
-            self.serve_crons()
-        elif self.path == '/api/stats':
-            self.serve_stats()
-        elif self.path == '/api/agents':
-            self.serve_agents()
+# In-memory cache to simulate the old file polling without spamming the gateway too hard
+cache = {
+    "sessions": [],
+    "last_update": 0
+}
+
+def fetch_active_sessions():
+    """Poll the gateway for active sessions."""
+    try:
+        payload = {
+            "tool": "sessions_list",
+            "action": "json",
+            "args": {"activeMinutes": 60}
+        }
+        res = requests.post(f"{GATEWAY_URL}/tools/invoke", json=payload, headers=HEADERS, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            # Depending on how the array is wrapped in your specific openclaw version
+            # Usually it returns {"result": [...]} or directly the array [...]
+            sessions = data.get("result", data) if isinstance(data, dict) else data
+            
+            cache["sessions"] = sessions
+            cache["last_update"] = time.time()
+            print(f"[API] Successfully fetched {len(sessions) if isinstance(sessions, list) else 0} sessions.")
         else:
-            super().do_GET()
+            print(f"[API Error] Failed to fetch sessions: {res.status_code} - {res.text}")
+    except Exception as e:
+        print(f"[API Exception] Could not connect to OpenClaw Gateway: {e}")
 
-    def serve_memory(self):
-        """Serve memory files data"""
-        memory_dir = os.path.join(WORKSPACE, "memory")
+def background_poller():
+    """Poll everyday 5 seconds."""
+    while True:
+        fetch_active_sessions()
+        time.sleep(5)
+
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    """Endpoint for the 3D dashboard to read the current state."""
+    sessions_data = cache["sessions"]
+    
+    # OpenClaw sometimes returns a stringified JSON block in content[0].text. Unpack it for the dashboard.
+    try:
+        if isinstance(sessions_data, dict) and "content" in sessions_data:
+            content_array = sessions_data["content"]
+            if len(content_array) > 0 and "text" in content_array[0]:
+                raw_text = content_array[0]["text"]
+                # Try parsing the string to JSON
+                import json
+                parsed_text = json.loads(raw_text)
+                
+                # Replace the raw text with a clean dictionary
+                sessions_data["content"][0]["text_parsed"] = parsed_text
+    except Exception as e:
+        print(f"[API Warning] Could not parse session text logic: {e}")
+        
+    return jsonify({
+        "status": "ok",
+        "last_update": cache["last_update"],
+        "sessions": sessions_data
+    })
+
+@app.route('/api/invoke', methods=['POST'])
+def invoke_tool():
+    """Proxy any explicit tool invocation from the dashboard directly to the gateway."""
+    try:
+        data = request.json
+        res = requests.post(f"{GATEWAY_URL}/tools/invoke", json=data, headers=HEADERS, timeout=10)
+        return jsonify(res.json()), res.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/agent-files/<agent_name>', methods=['GET'])
+def get_agent_files(agent_name):
+    """Uses local SSH to read the agent's folder on the server."""
+    # Security: basic sanitization
+    safe_name = "".join(c for c in agent_name if c.isalnum() or c in "-_")
+    if not safe_name:
+        return jsonify([])
+
+    # Some agents map differently to their folder names. Let's do a basic mapping
+    folder_mapping = {
+        "CEO": "main",
+        "Head of Tech (CTO)": "tech",
+        "Head of Biz (COO)": "business",
+        "Head of Security (CISO)": "security",
+        "Head of Personal (COS)": "personal",
+        "Head of Growth (MB)": "growth"
+    }
+    folder = folder_mapping.get(safe_name, safe_name)
+
+    import subprocess
+    cmd = f"ls -lh ~/.openclaw/agents/{folder} ~/.openclaw/agents/{folder}/agent ~/.openclaw/agents/{folder}/sessions 2>/dev/null"
+    
+    try:
+        result = subprocess.check_output(
+            ["ssh", "-i", "peds.pem", "-o", "StrictHostKeyChecking=no", "ubuntu@100.101.199.17", cmd],
+            text=True, timeout=5
+        )
+        
         files = []
-        recent_entries = []
-
-        try:
-            for filepath in glob.glob(os.path.join(memory_dir, "*.md")):
-                stat = os.stat(filepath)
-                filename = os.path.basename(filepath)
-                files.append({
-                    "name": filename,
-                    "modified": stat.st_mtime * 1000,
-                    "size": stat.st_size
-                })
-
-                # Parse recent entries (last 24h)
-                if stat.st_mtime > (datetime.now() - timedelta(days=1)).timestamp():
-                    try:
-                        with open(filepath, 'r') as f:
-                            content = f.read()
-                            entries = self.parse_memory_content(content, filename)
-                            recent_entries.extend(entries)
-                    except:
-                        pass
-        except Exception as e:
-            print(f"Error reading memory: {e}")
-
-        # Sort by timestamp descending
-        recent_entries.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-
-        self.send_json({
-            "files": files,
-            "recentEntries": recent_entries[:50],  # Last 50 entries
-            "lastUpdate": datetime.now().isoformat()
-        })
-
-    def parse_memory_content(self, content, filename):
-        """Parse memory file content to extract interactions"""
-        entries = []
-        lines = content.split('\n')
-        current_entry = None
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Look for timestamp patterns
-            if line.startswith('# ') and ('2026-' in line or '2025-' in line):
-                if current_entry:
-                    entries.append(current_entry)
-                current_entry = {
-                    "timestamp": self.extract_timestamp(line),
-                    "title": line.replace('# ', ''),
-                    "content": "",
-                    "source": filename
-                }
-            elif line.startswith('## ') and current_entry:
-                current_entry["content"] += line + "\n"
-            elif line.startswith('- ') and current_entry:
-                current_entry["content"] += line + "\n"
-                # Try to extract interactions
-                interaction = self.extract_interaction(line)
-                if interaction:
-                    current_entry["interaction"] = interaction
-            elif current_entry:
-                current_entry["content"] += line + "\n"
-
-        if current_entry:
-            entries.append(current_entry)
-
-        return entries
-
-    def extract_timestamp(self, line):
-        """Extract timestamp from header line"""
-        try:
-            # Format: # 2026-02-20 - Title
-            date_part = line.split(' - ')[0].replace('# ', '').strip()
-            dt = datetime.strptime(date_part, '%Y-%m-%d')
-            return dt.timestamp() * 1000
-        except:
-            return datetime.now().timestamp() * 1000
-
-    def extract_interaction(self, line):
-        """Try to extract agent interaction from a line"""
-        # Look for patterns like "CEO → Head" or "délégué à"
-        agents = ['CEO', 'Orchestrator', 'Head of Tech', 'Head of Biz', 'Head of Security',
-                  'Head of Personal', 'Head of Growth', 'ui-agent', 'ux-agent',
-                  'codeur-agent', 'debugger-agent', 'CTO', 'COO', 'CISO', 'COS', 'MB']
-
-        found_agents = []
-        for agent in agents:
-            if agent in line:
-                found_agents.append(agent)
-
-        if len(found_agents) >= 2:
-            return {
-                "from": found_agents[0],
-                "to": found_agents[1],
-                "type": "delegation" if any(w in line.lower() for w in ['délég', 'deleg', 'envoy', 'ask']) else "response"
-            }
-        return None
-
-    def serve_sessions(self):
-        """Serve active sessions"""
-        # Read from session transcript files
-        sessions_dir = os.path.join(WORKSPACE, "..", "agents", "main", "sessions")
-        sessions = []
-
-        try:
-            for filepath in glob.glob(os.path.join(sessions_dir, "*.jsonl")):
-                stat = os.stat(filepath)
-                # Active if modified in last 30 minutes
-                if stat.st_mtime > (datetime.now() - timedelta(minutes=30)).timestamp():
-                    sessions.append({
-                        "id": os.path.basename(filepath).replace('.jsonl', ''),
-                        "lastActivity": stat.st_mtime * 1000,
-                        "active": True
+        for line in result.split('\n'):
+            parts = line.split()
+            if len(parts) >= 9 and not line.startswith('d'):
+                size = parts[4]
+                date = f"{parts[5]} {parts[6]} {parts[7]}"
+                name = parts[8]
+                if name.endswith('.md') or name.endswith('.json') or name.endswith('.jsonl'):
+                    files.append({
+                        "name": name,
+                        "type": "memory" if "session" in name or name.endswith('.jsonl') else "config",
+                        "size": size,
+                        "modified": date
                     })
-        except Exception as e:
-            print(f"Error reading sessions: {e}")
-
-        self.send_json({
-            "sessions": sessions,
-            "count": len(sessions)
-        })
-
-    def serve_crons(self):
-        """Serve cron jobs status"""
-        # This would need to query the actual cron system
-        # For now, return placeholder
-        self.send_json({
-            "jobs": [],
-            "count": 0
-        })
-
-    def serve_stats(self):
-        """Serve global stats"""
-        # Calculate stats from memory files
-        memory_dir = os.path.join(WORKSPACE, "memory")
-        total_files = 0
-        total_size = 0
-        today_entries = 0
-
-        try:
-            for filepath in glob.glob(os.path.join(memory_dir, "*.md")):
-                stat = os.stat(filepath)
-                total_files += 1
-                total_size += stat.st_size
-                if datetime.fromtimestamp(stat.st_mtime).date() == datetime.now().date():
-                    today_entries += 1
-        except:
-            pass
-
-        self.send_json({
-            "tokens": total_size,  # Using file size as proxy
-            "tasks": today_entries,
-            "activeAgents": total_files,
-            "conversations": today_entries,
-            "lastUpdate": datetime.now().isoformat()
-        })
-
-    def serve_agents(self):
-        """Serve agent configurations"""
-        agents = [
-            {"name": "CEO", "role": "Orchestrator", "department": "Executive"},
-            {"name": "Head of Tech (CTO)", "role": "CTO", "department": "Tech"},
-            {"name": "Head of Biz (COO)", "role": "COO", "department": "Business"},
-            {"name": "Head of Security (CISO)", "role": "CISO", "department": "Security"},
-            {"name": "Head of Personal (COS)", "role": "COS", "department": "Personal"},
-            {"name": "Head of Growth (MB)", "role": "MB", "department": "Growth"},
-        ]
-
-        self.send_json({"agents": agents})
-
-    def send_json(self, data):
-        """Send JSON response"""
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        
+        return jsonify(files)
+    except Exception as e:
+        print(f"[API Error] Cannot fetch SSH files for {folder}: {e}")
+        return jsonify([])
 
 if __name__ == '__main__':
-    os.chdir(os.path.join(WORKSPACE, "..", ".."))  # Serve from openclaw root
-    with socketserver.TCPServer(("", PORT), APIHandler) as httpd:
-        print(f"API Server running at http://localhost:{PORT}/")
-        httpd.serve_forever()
+    # Start the background poller before listening
+    threading.Thread(target=background_poller, daemon=True).start()
+    
+    # Start the local flask server
+    print("Starting Dashboard3D Proxy API on port 5000...")
+    app.run(host='0.0.0.0', port=5000)

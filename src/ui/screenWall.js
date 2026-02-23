@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { state } from '../state.js';
-import { createScreenLabel as createScreenLabelHTML } from '../labels.js';
 import { gateway } from '../api/gateway.js';
 import { dataAdapter } from '../api/dataAdapter.js';
+import { drawDashboardCanvas } from './dashboardCanvasRenderers.js';
 
 /**
  * Mur d'écrans - 6 grands écrans sur le mur de la salle
@@ -74,151 +74,104 @@ export function createScreenWall() {
         frame.castShadow = true;
         screenGroup.add(frame);
 
-        // Surface de l'écran (zone affichable)
-        const displayGeometry = new THREE.PlaneGeometry(screenWidth - 0.2, screenHeight - 0.3);
-        const displayMaterial = new THREE.MeshStandardMaterial({
-            color: 0x0a0a1a,
-            emissive: config.color,
-            emissiveIntensity: 0.1,
-            roughness: 0.2,
-            metalness: 0.1
+        // --- CANVAS NATIVE POUR TEXTURE 3D ---
+        const canvas = document.createElement('canvas');
+        canvas.width = 3840;   // 4K resolution bounds for exact sharpness
+        canvas.height = 2160;
+        const ctx = canvas.getContext('2d');
+        const texture = new THREE.CanvasTexture(canvas);
+
+        // Configuration de la texture
+        texture.anisotropy = 16;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        // Initialiser avec fond noir
+        ctx.fillStyle = '#050510';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        texture.needsUpdate = true;
+
+        // Surface de l'écran (prend tout le cadre ou presque)
+        const displayGeometry = new THREE.PlaneGeometry(screenWidth + 0.05, screenHeight + 0.05);
+        // MeshBasicMaterial ignore the lights, looking like a real self-illuminated LCD screen
+        const displayMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            map: texture
         });
         const display = new THREE.Mesh(displayGeometry, displayMaterial);
-        display.position.z = 0.03; // Légèrement devant le cadre
-        display.position.y = -0.05; // Décalé vers le bas pour le titre
+        display.position.z = 0.026; // Évite absolument le z-fighting avec le bord
         screenGroup.add(display);
 
-        // Bordure LED
-        const borderGeometry = new THREE.BoxGeometry(screenWidth + 0.05, screenHeight + 0.05, 0.02);
-        const borderMaterial = new THREE.MeshBasicMaterial({
-            color: config.color,
-            transparent: true,
-            opacity: 0.6
-        });
-        const border = new THREE.Mesh(borderGeometry, borderMaterial);
-        border.position.z = 0.02;
-        screenGroup.add(border);
+        // La "Bordure LED" recouvrait tout l'écran avec une opacité de 0.6 (filtre coloré sale),
+        // elle a été supprimée pour permettre l'affichage propre du Dashboard Apple-Style.
 
         // Stocker la référence
-        screens.push({
+        const screenObj = {
             id: config.id,
             group: screenGroup,
             display: display,
             config: config,
+            canvas: canvas,
+            ctx: ctx,
+            texture: texture,
             data: null, // Pour stocker les données dynamiques
-            contentElement: null // Élément HTML pour le contenu
-        });
+            isZoomed: false
+        };
+        screens.push(screenObj);
+
+        // Dessiner l'état initial (En attente)
+        drawScreenCanvas(screenObj);
 
         // Ajouter à la scène
         state.scene.add(screenGroup);
-
-        // Créer le label HTML pour le titre
-        createScreenLabelHTML(config.title, x, screenY + screenHeight / 2 + 0.2, wallZ, config.color);
-
-        // Créer l'élément HTML pour le contenu de l'écran
-        createScreenContentElement(config.id, config.color);
     });
 
     isInitialized = true;
-    console.log('[ScreenWall] Mur d\'écrans créé avec', screens.length, 'écrans sur le mur avant (porte)');
+    console.log('[ScreenWall] Mur d\'écrans créé (Mode Textures Nativés Canvas 3D)');
 }
 
 /**
- * Crée un élément HTML pour afficher le contenu d'un écran
+ * Retourne le canvas HTML 2D de l'écran donné pour un affichage DOM plein écran
  */
-function createScreenContentElement(screenId, color) {
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'screen-content';
-    contentDiv.id = `screen-content-${screenId}`;
-    contentDiv.innerHTML = '<div class="screen-placeholder">En attente de données...</div>';
-    document.getElementById('labels-container').appendChild(contentDiv);
-
-    // Stocker la référence dans l'objet screen
+export function getScreenCanvas(screenId) {
     const screen = screens.find(s => s.id === screenId);
-    if (screen) {
-        screen.contentElement = contentDiv;
-    }
-
-    // Positionner l'élément
-    updateScreenContentPosition(screenId);
-}
-
-/**
- * Met à jour la position d'un élément de contenu d'écran
- */
-function updateScreenContentPosition(screenId) {
-    const screen = screens.find(s => s.id === screenId);
-    if (!screen || !screen.contentElement) return;
-
-    const screenPos = screen.group.position.clone();
-    screenPos.y -= 0.5; // Décalage vers le bas pour le contenu
-    screenPos.z += 0.1; // Légèrement devant
-
-    const projected = screenPos.project(state.camera);
-    const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
-
-    // Cache si derrière la caméra
-    if (projected.z > 1) {
-        screen.contentElement.style.opacity = '0';
-    } else {
-        screen.contentElement.style.opacity = '1';
-        screen.contentElement.style.left = `${x}px`;
-        screen.contentElement.style.top = `${y}px`;
-    }
+    return screen ? screen.canvas : null;
 }
 
 /**
  * Met à jour les positions de tous les contenus d'écran
- * À appeler dans la boucle d'animation
+ * Ne fait plus rien avec le DOM, gardé pour compatibilité main.js
  */
 export function updateAllScreenContentsPosition() {
-    screens.forEach(screen => {
-        if (screen.contentElement) {
-            updateScreenContentPosition(screen.id);
-        }
-    });
+    // Plus besoin, les écrans sont texturés directement en 3D
 }
 
 /**
- * Formate les données pour l'affichage sur l'écran
+ * Définit l'état de zoom d'un écran spécifique
  */
-function formatScreenData(screenId, data) {
-    if (!data) return '<div class="screen-placeholder">--</div>';
-
-    const value = data.value !== undefined ? data.value : data;
-    const label = data.label || '';
-
-    switch (screenId) {
-        case 'tokens':
-            return `<div class="screen-value">${typeof value === 'number' ? value.toLocaleString() : value}</div>
-                    <div class="screen-label">${label || 'tokens utilisés'}</div>`;
-        case 'tasks':
-            return `<div class="screen-value">${value}</div>
-                    <div class="screen-label">${label || 'tâches actives'}</div>`;
-        case 'activity':
-            return `<div class="screen-value">${value}</div>
-                    <div class="screen-label">${label || 'agents actifs'}</div>`;
-        case 'cron':
-            return `<div class="screen-value">${value}</div>
-                    <div class="screen-label">${label || 'jobs planifiés'}</div>`;
-        case 'system':
-            return `<div class="screen-value">${value}%</div>
-                    <div class="screen-label">${label || 'charge système'}</div>`;
-        case 'chat':
-            if (Array.isArray(data.recent) && data.recent.length > 0) {
-                const items = data.recent.map(item =>
-                    `<div class="chat-item">${item.from} → ${item.to}</div>`
-                ).join('');
-                return `<div class="chat-list">${items}</div>`;
+export function setScreenZoomState(screenId, isZoomed) {
+    screens.forEach(screen => {
+        if (screen.id === screenId) {
+            screen.isZoomed = isZoomed;
+            // Force re-render with new zoom state
+            if (screen.data) {
+                updateScreenContent(screen.id, screen.data);
             }
-            return '<div class="screen-placeholder">Aucune interaction</div>';
-        default:
-            return `<div class="screen-value">${value}</div>`;
-    }
+        } else {
+            // Un-zoom others implicitly if they were zoomed
+            if (isZoomed && screen.isZoomed) {
+                screen.isZoomed = false;
+                if (screen.data) updateScreenContent(screen.id, screen.data);
+            }
+        }
+    });
 }
-
-
+/**
+ * Dessine les données dynamiquement sur le Canvas de l'écran 3D
+ */
+function drawScreenCanvas(screen) {
+    drawDashboardCanvas(screen);
+}
 
 /**
  * Met à jour le contenu d'un écran
@@ -227,28 +180,12 @@ function formatScreenData(screenId, data) {
  */
 export function updateScreenContent(screenId, data) {
     const screen = screens.find(s => s.id === screenId);
-    if (!screen) {
-        console.warn('[ScreenWall] Écran non trouvé:', screenId);
-        return;
-    }
+    if (!screen) return;
 
     screen.data = data;
 
-    // Mettre à jour l'effet visuel selon le type de données
-    const display = screen.display;
-
-    // Effet de pulse quand les données changent
-    display.material.emissiveIntensity = 0.5;
-    setTimeout(() => {
-        display.material.emissiveIntensity = 0.1;
-    }, 300);
-
-    // Mettre à jour le contenu HTML
-    if (screen.contentElement) {
-        screen.contentElement.innerHTML = formatScreenData(screenId, data);
-    }
-
-    console.log('[ScreenWall] Écran', screenId, 'mis à jour:', data);
+    // Dessiner sur le canvas 3D
+    drawScreenCanvas(screen);
 }
 
 /**
@@ -257,21 +194,18 @@ export function updateScreenContent(screenId, data) {
 export function resetAllScreens() {
     screens.forEach(screen => {
         screen.data = null;
-        screen.display.material.emissiveIntensity = 0.1;
+        if (screen.display) screen.display.material.emissiveIntensity = 1.0;
+        drawScreenCanvas(screen);
     });
     console.log('[ScreenWall] Tous les écrans réinitialisés');
 }
 
 /**
- * Anime les écrans (effet subtil)
+ * Anime les écrans
  */
 export function animateScreens(time) {
-    screens.forEach((screen, index) => {
-        // Légère variation d'intensité pour effet "vivant"
-        const baseIntensity = 0.1;
-        const variation = Math.sin(time * 2 + index) * 0.02;
-        screen.display.material.emissiveIntensity = baseIntensity + variation;
-    });
+    // Les écrans sont maintenant traités comme statiques pour éviter le scintillement (z-fighting) 
+    // et l'effet pulse qui gênait la lecture. Aucune variation d'emissive ou de positon.
 }
 
 /**

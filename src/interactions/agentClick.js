@@ -1,9 +1,16 @@
 import * as THREE from 'three';
 import { state } from '../state.js';
-import { zoomOnAgent, zoomOnScreen, resetCameraToGlobalView } from './cameraAnimator.js';
+import { zoomOnAgent, zoomOnScreen, resetCameraToGlobalView, superZoomOnScreen, zoomOnCEOScreen } from './cameraAnimator.js';
 import { openAgentPanel, closeAgentPanel, isAgentPanelOpen } from '../ui/agentPanel.js';
+import { setScreenZoomState, getScreenCanvas } from '../ui/screenWall.js';
 import { isEditorActive } from '../editor.js';
 import { isWarRoomActive, endWarRoomMode } from './warRoomMode.js';
+import { renderActivityKanban } from '../ui/activityKanban.js';
+import { renderTokensDashboard } from '../ui/tokensDashboard.js';
+import { renderTasksDashboard } from '../ui/tasksDashboard.js';
+import { renderCronDashboard } from '../ui/cronDashboard.js';
+import { renderSystemDashboard } from '../ui/systemDashboard.js';
+import { renderChatDashboard } from '../ui/chatDashboard.js';
 
 /**
  * Système de détection de clic sur les agents
@@ -15,6 +22,8 @@ let mouse = null;
 let clickables = []; // Liste des objets cliquables (agents et écrans)
 let isInitialized = false;
 let isZoomedOnScreen = false;
+let isZoomedOnAgent = false;
+let currentZoomedScreenId = null;
 
 /**
  * Initialise le système de clic sur agents
@@ -112,7 +121,6 @@ function onCanvasClick(event) {
     }
 
     // ⚠️ IMPORTANT : Ne pas interférer avec l'éditeur
-    // Si l'éditeur est actif (sélection bureau, mode route, mode sim), on désactive le clic agent
     if (isEditorActive()) {
         return;
     }
@@ -139,11 +147,11 @@ function onCanvasClick(event) {
             const screenData = clicked.userData.screenData;
             if (screenData) {
                 console.log('[AgentClick] Écran cliqué:', screenData.title);
-                handleScreenClick(screenData, clicked);
+                handleScreenClick(screenData, clicked, intersects[0].uv);
             }
         }
     } else {
-        // 📍 CLIC AILLEURS : Si le panneau agent est ouvert, on le ferme, sinon on dézoome l'écran ou le war room
+        // 📍 CLIC AILLEURS : fermetures
         if (isAgentPanelOpen()) {
             console.log('[AgentClick] Clic ailleurs - fermeture panneau agent');
             closeAgentPanel();
@@ -151,6 +159,12 @@ function onCanvasClick(event) {
             console.log('[AgentClick] Clic ailleurs - dézoom écran');
             resetCameraToGlobalView();
             isZoomedOnScreen = false;
+            currentZoomedScreenId = null;
+            setScreenZoomState(null, false); // Clear all zoomed screens
+        } else if (isZoomedOnAgent) {
+            console.log('[AgentClick] Clic ailleurs - dézoom agent');
+            resetCameraToGlobalView();
+            isZoomedOnAgent = false;
         } else if (isWarRoomActive()) {
             console.log('[AgentClick] Clic ailleurs - fermeture war room');
             endWarRoomMode();
@@ -164,7 +178,6 @@ function onCanvasClick(event) {
 function onCanvasMouseMove(event) {
     if (!raycaster || !mouse) return;
 
-    // Ne pas changer le curseur si l'éditeur est actif
     if (isEditorActive()) {
         document.getElementById('canvas').style.cursor = 'default';
         return;
@@ -189,32 +202,117 @@ function onCanvasMouseMove(event) {
  * Gère le clic sur un agent
  */
 function handleAgentClick(agentData, mesh) {
-    // Zoom sur l'agent
-    zoomOnAgent(agentData.model, () => {
-        // Ouvrir le panneau avec les infos
-        openAgentPanel({
-            name: agentData.name,
-            role: agentData.role,
-            department: agentData.department
+    if (agentData.name === 'CEO') {
+        const ceoGroup = agentData.model.parent;
+        if (isAgentPanelOpen()) closeAgentPanel();
+
+        zoomOnCEOScreen(ceoGroup, () => {
+            isZoomedOnAgent = true;
+            if (isZoomedOnScreen) {
+                setScreenZoomState(null, false);
+                isZoomedOnScreen = false;
+                currentZoomedScreenId = null;
+            }
+            // On ouvre le tableau de bord Système une fois l'animation de caméra terminée
+            open2DFullscreen('system');
         });
+        return;
+    }
+
+    zoomOnAgent(agentData.model, () => {
+        isZoomedOnAgent = true;
         if (isZoomedOnScreen) {
+            setScreenZoomState(null, false);
             isZoomedOnScreen = false;
+            currentZoomedScreenId = null;
         }
+    });
+
+    // Ouvrir le panneau d'agent
+    openAgentPanel(agentData);
+}
+
+/**
+ * Gère le clic sur un écran.
+ * Ouvre directement le dashboard HTML interactif après le zoom.
+ */
+function handleScreenClick(screenData, mesh, uv) {
+    if (isAgentPanelOpen()) closeAgentPanel();
+
+    // Prevent double clicking on the same screen
+    if (isZoomedOnScreen && currentZoomedScreenId === screenData.id) {
+        return;
+    }
+
+    // Clic sur l'écran → Zoom normal puis ouverture de l'UI HTML riche
+    zoomOnScreen(screenData.model, () => {
+        isZoomedOnScreen = true;
+        isZoomedOnAgent = false;
+        currentZoomedScreenId = screenData.id;
+        setScreenZoomState(screenData.id, true);
+
+        open2DFullscreen(screenData.id);
     });
 }
 
 /**
- * Gère le clic sur un écran
+ * Ouvre le dashboard en plein écran 2D.
+ * Plus de faux titlebar HTML : on affiche juste l'image nette 4K du canvas
+ * et on détecte les UV (u,v) du clic dessus pour les boutons natifs macOS.
  */
-function handleScreenClick(screenData, mesh) {
-    if (isAgentPanelOpen()) {
-        closeAgentPanel();
+function open2DFullscreen(screenId) {
+    const canvas = getScreenCanvas(screenId);
+    if (!canvas) return;
+
+    // Supprimer un éventuel overlay déjà ouvert
+    const old = document.getElementById('fullscreen-dashboard-overlay');
+    if (old) old.remove();
+
+    // Overlay container -> fond très sombre pour mettre le dashboard en valeur
+    const overlay = document.createElement('div');
+    overlay.id = 'fullscreen-dashboard-overlay';
+    Object.assign(overlay.style, {
+        position: 'fixed',
+        top: '0', left: '0',
+        width: '100vw', height: '100vh',
+        backgroundColor: '#f1f5f9', // Light background matching Kanban board
+        zIndex: '99999',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        userSelect: 'none'
+    });
+
+    const closeCb = () => {
+        console.log('[macOS 2D] ● Red - Quitter fullscreen et retour pièce');
+        overlay.remove();
+        resetCameraToGlobalView();
+        isZoomedOnScreen = false;
+        isZoomedOnAgent = false;
+        currentZoomedScreenId = null;
+        setScreenZoomState(null, false);
+    };
+
+    const minCb = () => {
+        console.log('[macOS 2D] ● Yellow - Fermer fullscreen (retour zoom 3D)');
+        overlay.remove();
+    };
+
+    if (screenId === 'activity') {
+        renderActivityKanban(overlay, closeCb, minCb);
+    } else if (screenId === 'tokens') {
+        renderTokensDashboard(overlay, closeCb, minCb);
+    } else if (screenId === 'tasks') {
+        renderTasksDashboard(overlay, closeCb, minCb);
+    } else if (screenId === 'cron') {
+        renderCronDashboard(overlay, closeCb, minCb);
+    } else if (screenId === 'system') {
+        renderSystemDashboard(overlay, closeCb, minCb);
+    } else if (screenId === 'chat') {
+        renderChatDashboard(overlay, closeCb, minCb);
     }
 
-    // Zoom sur l'écran
-    zoomOnScreen(screenData.model, () => {
-        isZoomedOnScreen = true;
-    });
+    document.body.appendChild(overlay);
 }
 
 /**
@@ -222,5 +320,5 @@ function handleScreenClick(screenData, mesh) {
  */
 export function debugRaycaster() {
     console.log('[AgentClick] Clickables:', clickables.length);
-    console.log('[AgentClick] Liste:', clickables.map(c => c.userData.agentData?.name || c.userData.screenData?.title));
+    console.log('[AgentClick] Liste:', clickables.map(c => c.userData.agentData?.name));
 }

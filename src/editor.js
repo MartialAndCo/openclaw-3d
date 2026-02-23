@@ -76,12 +76,12 @@ function createGizmos() {
 function createOrientationGizmo() {
     // Gizmo pour définir l'orientation finale du personnage
     orientationGizmo = new THREE.Group();
-    
+
     // Flèche principale (direction regard)
     const arrow = createArrow(0x00ff00, new THREE.Vector3(0, 0, 1));
     arrow.scale.setScalar(1.5);
     orientationGizmo.add(arrow);
-    
+
     // Cercle au sol
     const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.3, 0.35, 32),
@@ -89,7 +89,7 @@ function createOrientationGizmo() {
     );
     ring.rotation.x = -Math.PI / 2;
     orientationGizmo.add(ring);
-    
+
     // "Tête" du personnage (sphère)
     const head = new THREE.Mesh(
         new THREE.SphereGeometry(0.15, 16, 16),
@@ -97,7 +97,7 @@ function createOrientationGizmo() {
     );
     head.position.set(0, 0.15, 0);
     orientationGizmo.add(head);
-    
+
     orientationGizmo.visible = false;
     state.scene.add(orientationGizmo);
 }
@@ -112,7 +112,7 @@ function createArrow(color, direction) {
     line.rotation.x = direction.z !== 0 ? Math.PI / 2 : 0;
     line.position.copy(direction).multiplyScalar(0.5);
     group.add(line);
-    
+
     const cone = new THREE.Mesh(
         new THREE.ConeGeometry(0.08, 0.2, 8),
         new THREE.MeshBasicMaterial({ color })
@@ -121,7 +121,7 @@ function createArrow(color, direction) {
     cone.rotation.x = direction.z !== 0 ? Math.PI / 2 : 0;
     cone.position.copy(direction).multiplyScalar(1);
     group.add(cone);
-    
+
     return group;
 }
 
@@ -144,37 +144,41 @@ function createRouteVisualization() {
 
 function onPointerDown(event) {
     // Ignorer si on clique sur l'UI
-    if (event.target.closest('#editor-panel')) return;
-    
+    if (event.target.closest('#editor-panel') || event.target.closest('#editor-toggle-btn')) return;
+
+    // ⚠️ IMPORTANT: Si l'éditeur est fermé, on ne traite pas les clics ici (laisser agentClick.js gérer)
+    const panel = document.getElementById('editor-panel');
+    if (panel && panel.classList.contains('closed')) return;
+
     updateMouse(event);
     raycaster.setFromCamera(mouse, state.camera);
-    
+
     // Mode Route
     if (isRouteMode) {
         handleRoutePointerDown(event);
         return;
     }
-    
+
     // Mode Simulation
     if (isSimMode) {
         return; // Pas d'interaction en mode sim
     }
-    
+
     // Mode normal - sélection bureau OU clic sur employé pour routes
     const intersects = raycaster.intersectObjects(state.scene.children, true);
     let foundDesk = null;
     let hitPoint = null;
     let foundEmployee = null;
-    
+
     for (let hit of intersects) {
         let obj = hit.object;
-        
+
         // Chercher un bureau
         while (obj) {
             if (obj.userData && obj.userData.isDesk) {
                 foundDesk = obj;
                 hitPoint = hit.point;
-                
+
                 // Vérifier si on a cliqué sur l'employé (mesh enfant)
                 const occupant = obj.userData.deskData?.occupant;
                 if (occupant && hit.object !== obj) {
@@ -187,19 +191,14 @@ function onPointerDown(event) {
         }
         if (foundDesk) break;
     }
-    
-    // Si on a cliqué sur l'employé, montrer les routes disponibles
-    if (foundEmployee && event.button === 0) {
-        showEmployeeRoutesMenu(foundEmployee, event.clientX, event.clientY);
-        return;
-    }
-    
+
+
     if (!foundDesk || foundDesk !== selectedObject) {
         deselect();
         if (foundDesk) selectDesk(foundDesk);
         return;
     }
-    
+
     if (foundDesk === selectedObject && hitPoint && moveGizmo.visible) {
         isDragging = true;
         dragOffset.copy(hitPoint).sub(selectedObject.position);
@@ -212,7 +211,7 @@ function handleRoutePointerDown(event) {
     if (routeStep === 'ORIENTING') {
         const isLeftClick = event.button === 0;
         const isRightClick = event.button === 2;
-        
+
         if (isLeftClick) {
             // Clic gauche = tourner à gauche (22.5°)
             rotateOrientationGizmo(1);
@@ -220,13 +219,13 @@ function handleRoutePointerDown(event) {
             // Clic droit = tourner à droite (22.5°)
             rotateOrientationGizmo(-1);
         }
-        
+
         updateRouteStatus(`🎯 ORIENTATION: ${(finalOrientationY * 180 / Math.PI).toFixed(0)}° | Gauche: +22.5° | Droite: -22.5° | ✓ pour valider`);
         return;
     }
-    
+
     const intersects = raycaster.intersectObjects(state.scene.children, true);
-    
+
     // Si on est en train de dessiner, cliquer au sol ajoute un point
     if (routeStep === 'DRAWING') {
         // Vérifier si on clique sur le sol
@@ -236,7 +235,7 @@ function handleRoutePointerDown(event) {
         }
         return;
     }
-    
+
     // Sinon, chercher un bureau
     let foundDesk = null;
     for (let hit of intersects) {
@@ -250,12 +249,12 @@ function handleRoutePointerDown(event) {
         }
         if (foundDesk) break;
     }
-    
+
     if (!foundDesk) return;
-    
+
     const occupant = foundDesk.userData.deskData?.occupant;
     const name = occupant?.name || occupant?.role || 'Inconnu';
-    
+
     if (routeStep === 'SELECT_START') {
         routeStartDesk = {
             desk: foundDesk,
@@ -265,14 +264,14 @@ function handleRoutePointerDown(event) {
         routeStep = 'SELECT_END';
         highlightDesk(foundDesk, 0x00ff00); // Vert = départ
         updateRouteStatus(`✓ Départ: ${name}. Cliquez sur l'arrivée.`);
-        
+
     } else if (routeStep === 'SELECT_END') {
         // Vérifier que c'est pas le même
         if (foundDesk === routeStartDesk.desk) {
             updateRouteStatus('❌ Choisissez un bureau différent !');
             return;
         }
-        
+
         routeEndDesk = {
             desk: foundDesk,
             position: foundDesk.position.clone(),
@@ -280,7 +279,7 @@ function handleRoutePointerDown(event) {
         };
         routeStep = 'DRAWING';
         highlightDesk(foundDesk, 0xff0000); // Rouge = arrivée
-        
+
         // Trouver le personnage sur le bureau de départ pour obtenir sa position exacte
         let employeeWorldPos = null;
         routeStartDesk.desk.traverse((child) => {
@@ -291,7 +290,7 @@ function handleRoutePointerDown(event) {
                 employeeWorldPos = { x: worldPos.x, z: worldPos.z };
             }
         });
-        
+
         // Utiliser la position exacte du personnage, ou calculer derrière le bureau si pas trouvé
         let startPos;
         if (employeeWorldPos) {
@@ -305,21 +304,21 @@ function handleRoutePointerDown(event) {
                 z: routeStartDesk.position.z - Math.cos(deskRot) * chairZ
             };
         }
-        
+
         addRoutePoint(startPos);
-        
+
         updateRouteStatus(`✓ ${routeStartDesk.name} → ${name}. Cliquez au sol pour tracer la route. ✓ pour valider.`);
     }
 }
 
 function onPointerMove(event) {
     updateMouse(event);
-    
+
     if (isDragging && selectedObject) {
         raycaster.setFromCamera(mouse, state.camera);
         const target = new THREE.Vector3();
         raycaster.ray.intersectPlane(dragPlane, target);
-        
+
         if (target) {
             selectedObject.position.x = target.x - dragOffset.x;
             selectedObject.position.z = target.z - dragOffset.z;
@@ -329,7 +328,7 @@ function onPointerMove(event) {
         }
         return;
     }
-    
+
     // Curseur - avec throttle pour performance
     if (isRouteMode && routeStep === 'DRAWING') {
         document.body.style.cursor = 'crosshair';
@@ -337,7 +336,7 @@ function onPointerMove(event) {
         const now = performance.now();
         if (now - lastRaycastTime < RAYCAST_THROTTLE_MS) return;
         lastRaycastTime = now;
-        
+
         raycaster.setFromCamera(mouse, state.camera);
         const intersects = raycaster.intersectObjects(state.scene.children, true);
         let foundDesk = null;
@@ -375,7 +374,7 @@ function getPointOnGround() {
 function addRoutePoint(position) {
     // Si on est en mode orientation, on ignore
     if (routeStep === 'ORIENTING') return;
-    
+
     // Créer un marqueur
     const geometry = new THREE.SphereGeometry(0.1, 12, 12);
     const color = routePoints.length === 0 ? 0x00ff00 : 0xffff00;
@@ -384,24 +383,24 @@ function addRoutePoint(position) {
     marker.position.set(position.x, 0.1, position.z);
     state.scene.add(marker);
     routeMarkers.push(marker);
-    
+
     // Ajouter le point
     routePoints.push({ x: position.x, z: position.z });
-    
+
     // Mettre à jour la ligne
     updateRouteLine();
-    
+
     updateRouteStatus(`Point ${routePoints.length} ajouté. Continuez ou cliquez ✓ pour terminer et orienter.`);
 }
 
 function startOrientationMode() {
     routeStep = 'ORIENTING';
-    
+
     // Positionner le gizmo d'orientation sur le dernier point
     const lastPoint = routePoints[routePoints.length - 1];
     orientationGizmo.position.set(lastPoint.x, 0, lastPoint.z);
     orientationGizmo.visible = true;
-    
+
     // Orienter vers le bureau de destination par défaut
     if (routeEndDesk) {
         const endPos = routeEndDesk.position;
@@ -412,7 +411,7 @@ function startOrientationMode() {
         finalOrientationY = 0;
     }
     orientationGizmo.rotation.y = finalOrientationY;
-    
+
     updateRouteStatus(`🎯 ORIENTATION: ${(finalOrientationY * 180 / Math.PI).toFixed(0)}° | Gauche: +22.5° | Droite: -22.5° | ✓ pour valider`);
 }
 
@@ -425,7 +424,7 @@ function rotateOrientationGizmo(direction) {
 
 function updateRouteLine() {
     if (routePoints.length < 2) return;
-    
+
     const points3D = routePoints.map(p => new THREE.Vector3(p.x, 0.05, p.z));
     tempRouteLine.geometry.setFromPoints(points3D);
     tempRouteLine.computeLineDistances();
@@ -437,13 +436,13 @@ function validateRoute() {
         updateRouteStatus('❌ Route invalide (min 2 points)');
         return;
     }
-    
+
     // Si on n'est pas encore en mode orientation, on y passe maintenant
     if (routeStep !== 'ORIENTING') {
         startOrientationMode();
         return;
     }
-    
+
     // On est en mode orientation, on sauvegarde la route
     // Créer la route permanente
     const points3D = routePoints.map(p => new THREE.Vector3(p.x, 0.05, p.z));
@@ -456,12 +455,12 @@ function validateRoute() {
     });
     const permanentLine = new THREE.Line(geometry, material);
     state.scene.add(permanentLine);
-    
+
     // Marqueur d'arrivée en rouge
     if (routeMarkers.length > 0) {
         routeMarkers[routeMarkers.length - 1].material.color.setHex(0xff0000);
     }
-    
+
     // Sauvegarder avec l'orientation finale
     const route = {
         id: `route_${Date.now()}`,
@@ -473,13 +472,13 @@ function validateRoute() {
         line: permanentLine,
         markers: [...routeMarkers]
     };
-    
+
     savedRoutes.push(route);
     updateSavedRoutesList();
-    
+
     console.log('[Route] Sauvegardée:', route.name, 'Orientation:', finalOrientationY);
     updateRouteStatus(`✓ Route "${route.name}" sauvegardée (orientation: ${(finalOrientationY * 180 / Math.PI).toFixed(0)}°) !`);
-    
+
     // Reset
     resetRouteCreation();
 }
@@ -492,19 +491,19 @@ function resetRouteCreation() {
     routeMarkers = [];
     finalOrientationY = null;
     tempRouteLine.visible = false;
-    
+
     // Cacher le gizmo d'orientation
     if (orientationGizmo) {
         orientationGizmo.visible = false;
     }
-    
+
     // Reset highlights
     state.scene.traverse((obj) => {
         if (obj.userData.originalEmissive) {
             if (obj.material) obj.material.emissive.setHex(obj.userData.originalEmissive);
         }
     });
-    
+
     updateRouteStatus('Cliquez sur le bureau de départ.');
 }
 
@@ -515,11 +514,11 @@ function clearAllRoutes() {
     });
     savedRoutes = [];
     updateSavedRoutesList();
-    
+
     // Nettoyer aussi la création en cours
     routeMarkers.forEach(m => state.scene.remove(m));
     resetRouteCreation();
-    
+
     updateRouteStatus('Toutes les routes effacées.');
 }
 
@@ -528,25 +527,25 @@ function clearAllRoutes() {
 function simulateRoute(routeIndex) {
     const route = savedRoutes[routeIndex];
     if (!route) return;
-    
+
     // Arrêter la simulation précédente
     if (currentSimAnimator) {
         currentSimAnimator.stop();
     }
-    
+
     console.log('[Sim] Début:', route.name);
     updateSimStatus(`Simulation: ${route.name}...`);
-    
+
     // Trouver le deskGroup de départ
     const startEmployeeName = route.startName;
     let foundDeskGroup = null;
     let employeeModel = null;
-    
+
     state.scene.traverse((obj) => {
         if (obj.userData && obj.userData.isDesk) {
             const occupant = obj.userData.deskData?.occupant;
             const occupantName = occupant?.name || occupant?.role;
-            
+
             if (occupantName === startEmployeeName && !foundDeskGroup) {
                 foundDeskGroup = obj;
                 // L'employé est le dernier enfant ajouté (après les meubles)
@@ -557,7 +556,7 @@ function simulateRoute(routeIndex) {
             }
         }
     });
-    
+
     // Fallback sur CEO
     if (!employeeModel || !foundDeskGroup) {
         console.warn('[Sim] Employé non trouvé, utilisation du CEO');
@@ -566,27 +565,27 @@ function simulateRoute(routeIndex) {
             employeeModel = ceoAnimator.model;
         }
     }
-    
+
     if (!employeeModel) {
         updateSimStatus('❌ Erreur: aucun modèle trouvé');
         return;
     }
-    
+
     console.log('[Sim] Employé:', startEmployeeName, 'Desk:', foundDeskGroup?.uuid);
-    
+
     // Créer l'animator avec le deskGroup pour pouvoir ré-attacher après
     const animator = new EmployeeAnimator(employeeModel, foundDeskGroup);
     currentSimAnimator = animator;
-    
+
     // Rendre disponible globalement pour l'update
     window.currentEmployeeAnimator = animator;
-    
+
     // Convertir les points de la route en coordonnées mondiales si nécessaire
     const worldPoints = route.points.map(p => ({ x: p.x, z: p.z }));
-    
+
     // Récupérer l'orientation finale (si définie)
     const finalOrientation = route.finalOrientation !== undefined ? route.finalOrientation : null;
-    
+
     // Exécuter avec l'orientation finale et le nom de route
     animator.executeRoute(worldPoints, finalOrientation, route.name).then(() => {
         updateSimStatus(`✓ ${route.name} terminée !`);
@@ -609,7 +608,7 @@ function createEditorUI() {
     toggleBtn.innerHTML = '⚙️';
     toggleBtn.title = 'Ouvrir l\'éditeur';
     document.body.appendChild(toggleBtn);
-    
+
     // Créer le panel éditeur (caché par défaut)
     const panel = document.createElement('div');
     panel.id = 'editor-panel';
@@ -674,7 +673,7 @@ function createEditorUI() {
         </div>
     `;
     document.body.appendChild(panel);
-    
+
     // Styles
     const style = document.createElement('style');
     style.textContent = `
@@ -790,7 +789,7 @@ function createEditorUI() {
         }
     `;
     document.head.appendChild(style);
-    
+
     // Toggle bouton - ouvrir/fermer l'éditeur
     toggleBtn.addEventListener('click', () => {
         const isClosed = panel.classList.contains('closed');
@@ -804,14 +803,14 @@ function createEditorUI() {
             toggleBtn.title = 'Ouvrir l\'éditeur';
         }
     });
-    
+
     // Bouton fermer dans le panel
     panel.querySelector('.editor-close-btn').addEventListener('click', () => {
         panel.classList.add('closed');
         toggleBtn.innerHTML = '⚙️';
         toggleBtn.title = 'Ouvrir l\'éditeur';
     });
-    
+
     // Events
     document.getElementById('pos-x').addEventListener('input', (e) => {
         if (selectedObject) {
@@ -819,14 +818,14 @@ function createEditorUI() {
             moveGizmo.position.x = selectedObject.position.x;
         }
     });
-    
+
     document.getElementById('pos-z').addEventListener('input', (e) => {
         if (selectedObject) {
             selectedObject.position.z = parseFloat(e.target.value);
             moveGizmo.position.z = selectedObject.position.z;
         }
     });
-    
+
     document.getElementById('btn-move-mode').addEventListener('click', () => {
         moveGizmo.visible = !!selectedObject;
         rotationGizmo.visible = false;
@@ -834,7 +833,7 @@ function createEditorUI() {
         document.getElementById('btn-rot-mode').classList.remove('active');
         if (selectedObject) state.controls.enabled = false;
     });
-    
+
     document.getElementById('btn-rot-mode').addEventListener('click', () => {
         moveGizmo.visible = false;
         rotationGizmo.visible = !!selectedObject;
@@ -842,18 +841,18 @@ function createEditorUI() {
         document.getElementById('btn-rot-mode').classList.add('active');
         state.controls.enabled = true;
     });
-    
+
     // Route mode
     document.getElementById('btn-route-mode').addEventListener('click', () => {
         isRouteMode = !isRouteMode;
         const btn = document.getElementById('btn-route-mode');
         const panel = document.getElementById('route-panel');
-        
+
         if (isRouteMode) {
             isSimMode = false;
             document.getElementById('btn-sim-mode').classList.remove('active');
             document.getElementById('sim-panel').style.display = 'none';
-            
+
             btn.classList.add('active');
             btn.textContent = '🛤️ Mode Routes (ON)';
             panel.style.display = 'block';
@@ -868,25 +867,25 @@ function createEditorUI() {
             resetRouteCreation();
         }
     });
-    
+
     document.getElementById('btn-validate-route').addEventListener('click', validateRoute);
     document.getElementById('btn-cancel-route').addEventListener('click', resetRouteCreation);
     document.getElementById('btn-clear-routes').addEventListener('click', clearAllRoutes);
-    
+
     // Éditeur 2D
     document.getElementById('btn-2d-editor').addEventListener('click', () => {
         routeEditor2D.open();
     });
-    
+
     // Écouter les événements de l'éditeur 2D
     window.addEventListener('editor2d-clear-routes', () => {
         clearAllRoutes();
         console.log('[Editor] Routes vidées par éditeur 2D');
     });
-    
+
     window.addEventListener('route-created-2d', (e) => {
         const { route, line, markers } = e.detail;
-        
+
         // Ajouter à savedRoutes
         savedRoutes.push({
             id: route.id,
@@ -898,21 +897,21 @@ function createEditorUI() {
             line: line,
             markers: markers
         });
-        
+
         updateSavedRoutesList();
         updateRouteStatus(`✓ Route "${route.name}" ajoutée depuis l'éditeur 2D`);
     });
-    
+
     // Génération automatique des routes
     document.getElementById('btn-auto-routes').addEventListener('click', () => {
         console.log('[Editor] Génération des routes automatiques...');
-        
+
         // Effacer les anciennes routes
         clearAllRoutes();
-        
+
         // Générer les nouvelles routes
         const routes = routeGenerator.generateAllRoutes();
-        
+
         // Ajouter les routes générées
         routes.forEach(route => {
             // Créer la ligne visuelle
@@ -926,7 +925,7 @@ function createEditorUI() {
             });
             const line = new THREE.Line(geometry, material);
             state.scene.add(line);
-            
+
             // Créer les marqueurs
             const markers = [];
             route.points.forEach((p, i) => {
@@ -939,7 +938,7 @@ function createEditorUI() {
                 state.scene.add(sphere);
                 markers.push(sphere);
             });
-            
+
             // Ajouter à la liste des routes sauvegardées
             savedRoutes.push({
                 id: route.id,
@@ -952,24 +951,24 @@ function createEditorUI() {
                 markers: markers
             });
         });
-        
+
         updateSavedRoutesList();
         updateRouteStatus(`✓ ${routes.length} routes générées automatiquement !`);
         console.log('[Editor] Routes générées:', routes.length);
     });
-    
+
     // Sim mode
     document.getElementById('btn-sim-mode').addEventListener('click', () => {
         isSimMode = !isSimMode;
         const btn = document.getElementById('btn-sim-mode');
         const panel = document.getElementById('sim-panel');
-        
+
         if (isSimMode) {
             isRouteMode = false;
             document.getElementById('btn-route-mode').classList.remove('active');
             document.getElementById('route-panel').style.display = 'none';
             resetRouteCreation();
-            
+
             btn.classList.add('active');
             btn.textContent = '▶️ Simulation (ON)';
             panel.style.display = 'block';
@@ -981,7 +980,7 @@ function createEditorUI() {
             panel.style.display = 'none';
         }
     });
-    
+
     document.getElementById('btn-stop-sim').addEventListener('click', () => {
         if (currentSimAnimator) {
             currentSimAnimator.stop();
@@ -991,7 +990,7 @@ function createEditorUI() {
         ceoAnimator.stopRoute();
         updateSimStatus('Simulation arrêtée');
     });
-    
+
     // Export/Import
     document.getElementById('btn-export').addEventListener('click', exportConfig);
     document.getElementById('btn-import').addEventListener('click', () => {
@@ -1005,12 +1004,12 @@ function createEditorUI() {
 function updateEditorUI() {
     const info = document.getElementById('selected-info');
     if (!info) return;
-    
+
     if (!selectedObject) {
         info.style.display = 'none';
         return;
     }
-    
+
     info.style.display = 'block';
     document.getElementById('pos-x').value = selectedObject.position.x.toFixed(2);
     document.getElementById('pos-z').value = selectedObject.position.z.toFixed(2);
@@ -1029,12 +1028,12 @@ function updateSimStatus(text) {
 function updateSavedRoutesList() {
     const list = document.getElementById('saved-routes-list');
     if (!list) return;
-    
+
     if (savedRoutes.length === 0) {
         list.innerHTML = '<div style="color:#888;font-size:11px;padding:10px;">Aucune route enregistrée</div>';
         return;
     }
-    
+
     list.innerHTML = savedRoutes.map((route, index) => `
         <div class="route-item">
             <span>${route.name}</span>
@@ -1056,25 +1055,25 @@ window.simulatePredefinedRoute = (routeId) => {
         console.error('[Sim] IDs disponibles:', ALL_ROUTES.map(r => r.id).join(', '));
         return;
     }
-    
+
     // Arrêter la simulation précédente
     if (currentSimAnimator) {
         currentSimAnimator.stop();
     }
-    
+
     console.log('[Sim] Début route prédéfinie:', route.name);
     updateSimStatus(`Simulation: ${route.name}...`);
-    
+
     // Trouver le deskGroup de départ
     const startEmployeeName = route.startName;
     let foundDeskGroup = null;
     let employeeModel = null;
-    
+
     state.scene.traverse((obj) => {
         if (obj.userData && obj.userData.isDesk) {
             const occupant = obj.userData.deskData?.occupant;
             const occupantName = occupant?.name || occupant?.role;
-            
+
             if (occupantName === startEmployeeName && !foundDeskGroup) {
                 foundDeskGroup = obj;
                 // L'employé est le dernier enfant ajouté (après les meubles)
@@ -1085,7 +1084,7 @@ window.simulatePredefinedRoute = (routeId) => {
             }
         }
     });
-    
+
     // Fallback sur CEO
     if (!employeeModel || !foundDeskGroup) {
         console.warn('[Sim] Employé non trouvé, utilisation du CEO');
@@ -1094,32 +1093,32 @@ window.simulatePredefinedRoute = (routeId) => {
             employeeModel = ceoAnimator.model;
         }
     }
-    
+
     if (!employeeModel) {
         updateSimStatus('❌ Erreur: aucun modèle trouvé');
         return;
     }
-    
+
     console.log('[Sim] Employé:', startEmployeeName, 'Desk:', foundDeskGroup?.uuid);
-    
+
     // Créer l'animator avec le deskGroup pour pouvoir ré-attacher après
     const animator = new EmployeeAnimator(employeeModel, foundDeskGroup);
     currentSimAnimator = animator;
-    
+
     // Rendre disponible globalement pour l'update
     window.currentEmployeeAnimator = animator;
-    
+
     // Convertir les points de la route en coordonnées mondiales
     const worldPoints = route.points.map(p => ({ x: p.x, z: p.z }));
-    
+
     // Récupérer l'orientation finale
     const finalOrientation = route.finalOrientation !== undefined ? route.finalOrientation : null;
-    
+
     // Exécuter avec l'orientation finale et le nom de route
     // Passer isWarRoom pour les routes War Room
     const isWarRoom = route.isWarRoom || false;
     const chairIndex = route.chairIndex !== undefined ? route.chairIndex : null;
-    
+
     animator.executeRoute(worldPoints, finalOrientation, route.name, isWarRoom, chairIndex).then(() => {
         updateSimStatus(`✓ ${route.name} terminée !`);
         currentSimAnimator = null;
@@ -1134,144 +1133,6 @@ window.simulatePredefinedRoute = (routeId) => {
 
 // ============== MENU ROUTES PAR EMPLOYÉ ==============
 
-function showEmployeeRoutesMenu(occupant, mouseX, mouseY) {
-    const employeeName = occupant.name || occupant.role;
-    
-    // Combiner les routes prédéfinies avec les routes sauvegardées
-    const allAvailableRoutes = [...ALL_ROUTES];
-    
-    // Ajouter les routes sauvegardées qui ne sont pas déjà dans les prédéfinies (par nom)
-    const predefinedNames = new Set(ALL_ROUTES.map(r => r.name));
-    savedRoutes.forEach(route => {
-        if (!predefinedNames.has(route.name)) {
-            allAvailableRoutes.push(route);
-        }
-    });
-    
-    // Trouver toutes les routes pour cet employé
-    const employeeRoutes = allAvailableRoutes.filter(r => 
-        r.startName === employeeName || r.endName === employeeName
-    );
-    
-    if (employeeRoutes.length === 0) {
-        showNotification(`📍 ${employeeName} - Aucune route disponible`);
-        return;
-    }
-    
-    // Supprimer l'ancien menu s'il existe
-    const oldMenu = document.getElementById('employee-routes-menu');
-    if (oldMenu) oldMenu.remove();
-    
-    // Créer le menu
-    const menu = document.createElement('div');
-    menu.id = 'employee-routes-menu';
-    menu.style.cssText = `
-        position: fixed;
-        left: ${Math.min(mouseX, window.innerWidth - 300)}px;
-        top: ${Math.min(mouseY, window.innerHeight - 400)}px;
-        width: 280px;
-        max-height: 350px;
-        background: rgba(30, 30, 40, 0.98);
-        backdrop-filter: blur(10px);
-        border: 2px solid #6366f1;
-        border-radius: 12px;
-        padding: 15px;
-        color: white;
-        font-family: system-ui, sans-serif;
-        font-size: 13px;
-        z-index: 10000;
-        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        overflow-y: auto;
-    `;
-    
-    // Header
-    menu.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;border-bottom:1px solid #444;padding-bottom:10px;">
-            <div>
-                <div style="font-weight:bold;font-size:14px;color:#6366f1;">🧑‍💼 ${employeeName}</div>
-                <div style="font-size:11px;color:#888;margin-top:2px;">${employeeRoutes.length} routes disponibles</div>
-            </div>
-            <button onclick="document.getElementById('employee-routes-menu').remove()" style="background:#ef4444;border:none;width:24px;height:24px;border-radius:50%;color:white;cursor:pointer;font-size:12px;">✕</button>
-        </div>
-        <div id="employee-routes-list"></div>
-    `;
-    
-    document.body.appendChild(menu);
-    
-    // Remplir la liste des routes
-    const list = document.getElementById('employee-routes-list');
-    
-    // Grouper par type
-    const fromRoutes = employeeRoutes.filter(r => r.startName === employeeName);
-    const toRoutes = employeeRoutes.filter(r => r.endName === employeeName);
-    
-    // Fonction helper pour obtenir l'identifiant de la route
-    const getRouteRef = (route) => {
-        const savedIndex = savedRoutes.findIndex(r => r.name === route.name);
-        if (savedIndex >= 0) {
-            return { type: 'saved', index: savedIndex };
-        }
-        return { type: 'predefined', route: route };
-    };
-    
-    if (fromRoutes.length > 0) {
-        list.innerHTML += `<div style="color:#10b981;font-size:11px;margin-bottom:8px;font-weight:bold;">➡️ Départs (${fromRoutes.length})</div>`;
-        fromRoutes.forEach((route) => {
-            const routeRef = getRouteRef(route);
-            const isDoorRoute = route.name.includes('PORTE');
-            const isWarRoomRoute = route.name.includes('War Room');
-            const onclickAttr = routeRef.type === 'saved' 
-                ? `onclick="simulateRouteByIndex(${routeRef.index}); document.getElementById('employee-routes-menu').remove();"`
-                : `onclick="simulatePredefinedRoute('${route.id}'); document.getElementById('employee-routes-menu').remove();"`;
-            list.innerHTML += `
-                <div ${onclickAttr}
-                     style="background:#2d2d44;padding:10px;margin-bottom:8px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;"
-                     onmouseover="this.style.background='#3d3d54'"
-                     onmouseout="this.style.background='#2d2d44'">
-                    <div>
-                        <div style="font-size:12px;">${isDoorRoute ? '🚪 ' : ''}${isWarRoomRoute ? '🪑 ' : ''}${route.endName}</div>
-                        <div style="font-size:10px;color:#888;">${route.points.length} points</div>
-                    </div>
-                    <button style="background:#10b981;border:none;padding:6px 12px;border-radius:4px;color:white;cursor:pointer;font-size:11px;">▶</button>
-                </div>
-            `;
-        });
-    }
-    
-    if (toRoutes.length > 0) {
-        list.innerHTML += `<div style="color:#3b82f6;font-size:11px;margin:15px 0 8px 0;font-weight:bold;">⬅️ Arrivées (${toRoutes.length})</div>`;
-        toRoutes.forEach((route) => {
-            const routeRef = getRouteRef(route);
-            const isDoorRoute = route.name.includes('PORTE');
-            const onclickAttr = routeRef.type === 'saved' 
-                ? `onclick="simulateRouteByIndex(${routeRef.index}); document.getElementById('employee-routes-menu').remove();"`
-                : `onclick="simulatePredefinedRoute('${route.id}'); document.getElementById('employee-routes-menu').remove();"`;
-            list.innerHTML += `
-                <div ${onclickAttr}
-                     style="background:#2d2d44;padding:10px;margin-bottom:8px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;"
-                     onmouseover="this.style.background='#3d3d54'"
-                     onmouseout="this.style.background='#2d2d44'">
-                    <div>
-                        <div style="font-size:12px;">${isDoorRoute ? '🚪 ' : ''}Depuis ${route.startName}</div>
-                        <div style="font-size:10px;color:#888;">${route.points.length} points</div>
-                    </div>
-                    <button style="background:#3b82f6;border:none;padding:6px 12px;border-radius:4px;color:white;cursor:pointer;font-size:11px;">▶</button>
-                </div>
-            `;
-        });
-    }
-    
-    // Fermer le menu si on clique ailleurs
-    setTimeout(() => {
-        document.addEventListener('click', function closeMenu(e) {
-            if (!e.target.closest('#employee-routes-menu')) {
-                const menu = document.getElementById('employee-routes-menu');
-                if (menu) menu.remove();
-                document.removeEventListener('click', closeMenu);
-            }
-        });
-    }, 100);
-}
 
 function showNotification(text) {
     const notif = document.createElement('div');
@@ -1299,16 +1160,16 @@ function exportConfig() {
     // Éliminer les doublons basés sur le nom de route
     const uniqueRoutes = [];
     const seenNames = new Set();
-    
+
     savedRoutes.forEach(r => {
         if (!seenNames.has(r.name)) {
             seenNames.add(r.name);
             uniqueRoutes.push(r);
         }
     });
-    
+
     console.log(`[Export] ${savedRoutes.length} routes total, ${uniqueRoutes.length} uniques`);
-    
+
     const config = {
         version: '1.4',
         timestamp: new Date().toISOString(),
@@ -1322,7 +1183,7 @@ function exportConfig() {
             finalOrientation: r.finalOrientation
         }))
     };
-    
+
     state.scene.traverse((obj) => {
         if (obj.userData && obj.userData.isDesk) {
             const data = obj.userData.deskData;
@@ -1338,17 +1199,17 @@ function exportConfig() {
             });
         }
     });
-    
+
     const json = JSON.stringify(config, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
+
     const a = document.createElement('a');
     a.href = url;
     a.download = `openclaw-config-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    
+
     const btn = document.getElementById('btn-export');
     if (btn) {
         btn.textContent = '✅ Exporté !';
@@ -1361,18 +1222,18 @@ function importConfig(file) {
     reader.onload = (e) => {
         try {
             const config = JSON.parse(e.target.result);
-            
+
             if (config.routes) {
                 clearAllRoutes();
                 config.routes.forEach(routeData => {
                     const points3D = routeData.points.map(p => new THREE.Vector3(p.x, 0.05, p.z));
                     const geometry = new THREE.BufferGeometry().setFromPoints(points3D);
-                    const material = new THREE.LineBasicMaterial({ 
+                    const material = new THREE.LineBasicMaterial({
                         color: 0xff0000, linewidth: 4, transparent: true, opacity: 0.9
                     });
                     const line = new THREE.Line(geometry, material);
                     state.scene.add(line);
-                    
+
                     const markers = [];
                     routeData.points.forEach((p, i) => {
                         const color = i === 0 ? 0x00ff00 : (i === routeData.points.length - 1 ? 0xff0000 : 0xffff00);
@@ -1383,7 +1244,7 @@ function importConfig(file) {
                         state.scene.add(marker);
                         markers.push(marker);
                     });
-                    
+
                     savedRoutes.push({
                         id: routeData.id,
                         name: routeData.name,
@@ -1397,7 +1258,7 @@ function importConfig(file) {
                 });
                 updateSavedRoutesList();
             }
-            
+
             if (config.desks) {
                 config.desks.forEach((deskConfig) => {
                     state.scene.traverse((obj) => {
@@ -1415,7 +1276,7 @@ function importConfig(file) {
                     });
                 });
             }
-            
+
             alert('Configuration importée !');
         } catch (err) {
             alert('Erreur: ' + err.message);
@@ -1443,7 +1304,7 @@ function deselect() {
     moveGizmo.visible = false;
     rotationGizmo.visible = false;
     state.controls.enabled = true;
-    
+
     state.scene.traverse((obj) => {
         if (obj.userData.originalEmissive) {
             if (obj.material) obj.material.emissive.setHex(obj.userData.originalEmissive);

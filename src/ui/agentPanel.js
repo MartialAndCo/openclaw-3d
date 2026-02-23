@@ -40,34 +40,52 @@ export function initAgentPanel() {
             
             <div class="agent-panel-body">
                 <div class="agent-sections">
-                    <div class="section-tab active" data-section="files">
-                        <span class="tab-icon">📁</span>
-                        <span class="tab-label">Fichiers</span>
-                    </div>
-                    <div class="section-tab" data-section="conversations">
+                    <div class="section-tab active" data-section="chat">
                         <span class="tab-icon">💬</span>
-                        <span class="tab-label">Conversations</span>
+                        <span class="tab-label">Chat</span>
+                    </div>
+                    <div class="section-tab" data-section="config">
+                        <span class="tab-icon">⚙️</span>
+                        <span class="tab-label">Config</span>
                     </div>
                     <div class="section-tab" data-section="tasks">
                         <span class="tab-icon">✓</span>
                         <span class="tab-label">Tâches</span>
                     </div>
+                    <div class="section-tab" data-section="files">
+                        <span class="tab-icon">📁</span>
+                        <span class="tab-label">Fichiers</span>
+                    </div>
                 </div>
                 
                 <div class="section-content">
-                    <div class="section-panel active" id="section-files">
-                        <div class="empty-state">
-                            <span class="empty-icon">📂</span>
-                            <p>Aucun fichier</p>
-                            <span class="empty-hint">Les fichiers de l'agent apparaîtront ici</span>
+                    <div class="section-panel active" id="section-chat">
+                        <div class="chat-container">
+                            <div class="chat-messages" id="agent-chat-messages">
+                                <div class="empty-state">
+                                    <span class="empty-icon">💭</span>
+                                    <p>Aucun message</p>
+                                    <span class="empty-hint">L'historique apparaîtra ici</span>
+                                </div>
+                            </div>
+                            <div class="chat-input-area">
+                                <input type="text" id="agent-chat-input" class="chat-input" placeholder="Envoyer un message...">
+                                <button id="agent-chat-send" class="chat-send-btn">➤</button>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="section-panel" id="section-conversations">
-                        <div class="empty-state">
-                            <span class="empty-icon">💭</span>
-                            <p>Aucune conversation</p>
-                            <span class="empty-hint">Les conversations apparaîtront ici</span>
+                    <div class="section-panel" id="section-config">
+                        <div class="config-container">
+                            <div class="config-group">
+                                <label>Modèle IA Principal</label>
+                                <select class="config-select">
+                                    <option>GPT-4o</option>
+                                    <option>Claude 3.5 Sonnet</option>
+                                    <option>Llama 3</option>
+                                </select>
+                            </div>
+                            <button class="config-save-btn">Enregistrer</button>
                         </div>
                     </div>
                     
@@ -76,6 +94,25 @@ export function initAgentPanel() {
                             <span class="empty-icon">📋</span>
                             <p>Aucune tâche</p>
                             <span class="empty-hint">Les tâches assignées apparaîtront ici</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section-panel" id="section-files">
+                        <div class="files-view">
+                            <div class="files-list-container" id="files-list-wrapper">
+                                <div class="empty-state">
+                                    <span class="empty-icon">📂</span>
+                                    <p>Aucun fichier</p>
+                                </div>
+                            </div>
+                            <div class="file-editor-container" id="file-editor-wrapper" style="display: none;">
+                                <div class="file-editor-header">
+                                    <button class="file-editor-back" id="file-editor-back">◀</button>
+                                    <span class="file-editor-title" id="file-editor-title">filename</span>
+                                    <button class="file-editor-save" id="file-editor-save">💾</button>
+                                </div>
+                                <textarea class="file-editor-textarea" id="file-editor-textarea" spellcheck="false"></textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -88,7 +125,7 @@ export function initAgentPanel() {
     // Event listeners
     const closeBtn = panelElement.querySelector('.agent-panel-close');
     const overlay = panelElement.querySelector('.agent-panel-overlay');
-    
+
     closeBtn.addEventListener('click', closeAgentPanel);
     overlay.addEventListener('click', closeAgentPanel);
 
@@ -100,6 +137,41 @@ export function initAgentPanel() {
             switchTab(section);
         });
     });
+
+    // Chat Events
+    const chatSendBtn = panelElement.querySelector('#agent-chat-send');
+    const chatInput = panelElement.querySelector('#agent-chat-input');
+    if (chatSendBtn && chatInput) {
+        chatSendBtn.addEventListener('click', () => {
+            const msg = chatInput.value.trim();
+            if (msg) {
+                appendChatMessage('Me', msg, 'outgoing');
+                chatInput.value = '';
+                setTimeout(() => {
+                    appendChatMessage(currentAgent?.name || 'Agent', 'Je traite votre demande...', 'incoming');
+                }, 1000);
+            }
+        });
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') chatSendBtn.click();
+        });
+    }
+
+    // File Editor Events
+    const backBtn = panelElement.querySelector('#file-editor-back');
+    const saveBtn = panelElement.querySelector('#file-editor-save');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            panelElement.querySelector('#file-editor-wrapper').style.display = 'none';
+            panelElement.querySelector('#files-list-wrapper').style.display = 'block';
+        });
+    }
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            saveBtn.textContent = '✅';
+            setTimeout(() => saveBtn.textContent = '💾', 2000);
+        });
+    }
 
     console.log('[AgentPanel] Initialisé');
 }
@@ -124,6 +196,9 @@ export function openAgentPanel(agentData) {
     roleEl.textContent = agentData.role || 'Agent';
     deptEl.textContent = agentData.department || 'Unknown';
 
+    // Afficher des loaders
+    updateSectionData('files', { files: [] });
+
     // Charger les données temps réel
     loadAgentData(agentData.name);
 
@@ -137,16 +212,24 @@ export function openAgentPanel(agentData) {
 /**
  * Charge les données d'un agent depuis l'adaptateur
  */
-function loadAgentData(agentName) {
-    const data = dataAdapter.toAgentPanelData(agentName);
-    
-    // Mettre à jour les sections avec les vraies données
-    updateSectionData('files', { files: data.files });
-    updateSectionData('conversations', { conversations: data.conversations });
-    updateSectionData('tasks', { tasks: data.tasks, stats: data.stats });
-    
-    // Ajouter un indicateur de statut
-    updateAgentStatus(data.status, data.lastSeen);
+async function loadAgentData(agentName) {
+    const header = panelElement.querySelector('.agent-panel-header');
+    const oldStatus = header.querySelector('.agent-status-badge');
+    if (oldStatus) oldStatus.textContent = "⏳ Chargement...";
+
+    try {
+        const data = await dataAdapter.toAgentPanelData(agentName);
+
+        // Mettre à jour les sections avec les vraies données
+        updateSectionData('files', { files: data.files });
+        updateSectionData('chat', { conversations: data.conversations });
+        updateSectionData('tasks', { tasks: data.tasks, stats: data.stats });
+
+        // Ajouter un indicateur de statut
+        updateAgentStatus(data.status, data.lastSeen);
+    } catch (e) {
+        console.error("Erreur de chargement data agent:", e);
+    }
 }
 
 /**
@@ -154,16 +237,16 @@ function loadAgentData(agentName) {
  */
 function updateAgentStatus(status, lastSeen) {
     const header = panelElement.querySelector('.agent-panel-header');
-    
+
     // Supprime l'ancien statut s'il existe
     const oldStatus = header.querySelector('.agent-status-badge');
     if (oldStatus) oldStatus.remove();
-    
+
     // Crée le nouveau badge
     const statusBadge = document.createElement('span');
     statusBadge.className = `agent-status-badge status-${status}`;
     statusBadge.textContent = status === 'active' ? `🟢 En ligne (${lastSeen})` : `⚪ ${lastSeen}`;
-    
+
     header.querySelector('.agent-info').appendChild(statusBadge);
 }
 
@@ -172,7 +255,7 @@ function updateAgentStatus(status, lastSeen) {
  */
 export function closeAgentPanel() {
     if (!panelElement) return;
-    
+
     panelElement.classList.remove('open');
     isOpen = false;
     currentAgent = null;
@@ -230,19 +313,22 @@ export function getCurrentAgent() {
  */
 export function updateSectionData(sectionName, data) {
     if (!panelElement) return;
-    
+
     const panel = panelElement.querySelector(`#section-${sectionName}`);
     if (!panel) return;
 
     // Vide le contenu actuel
     panel.innerHTML = '';
 
-    switch(sectionName) {
+    switch (sectionName) {
         case 'files':
-            renderFiles(panel, data.files);
+            renderFiles(panel.querySelector('#files-list-wrapper') || panel, data.files);
             break;
-        case 'conversations':
-            renderConversations(panel, data.conversations);
+        case 'chat':
+            renderChat(panel.querySelector('#agent-chat-messages') || panel, data.conversations);
+            break;
+        case 'config':
+            // Config handled statically for now
             break;
         case 'tasks':
             renderTasks(panel, data.tasks, data.stats);
@@ -251,40 +337,71 @@ export function updateSectionData(sectionName, data) {
 }
 
 /**
+ * Ouvre l'éditeur de fichier
+ */
+function openFileEditor(file) {
+    if (!panelElement) return;
+
+    const listWrapper = panelElement.querySelector('#files-list-wrapper');
+    const editorWrapper = panelElement.querySelector('#file-editor-wrapper');
+    const titleEl = panelElement.querySelector('#file-editor-title');
+    const textareaEl = panelElement.querySelector('#file-editor-textarea');
+
+    if (listWrapper && editorWrapper && titleEl && textareaEl) {
+        titleEl.textContent = file.name;
+        // Mock data content based on filename
+        if (file.name === 'memory.md') {
+            textareaEl.value = '## Memory Object\n- User is active\n- Last task completed successfully.';
+        } else if (file.name === 'agent.md') {
+            textareaEl.value = `# System Prompt\nYou are an AI assistant specialized in development.`;
+        } else {
+            textareaEl.value = `// Contenu de ${file.name}\n\n`;
+        }
+
+        listWrapper.style.display = 'none';
+        editorWrapper.style.display = 'flex';
+    }
+}
+
+/**
  * Rendu de la section fichiers
  */
 function renderFiles(container, files) {
     if (!files || files.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <span class="empty-icon">📂</span>
-                <p>Aucun fichier</p>
-                <span class="empty-hint">Les fichiers de l'agent apparaîtront ici</span>
-            </div>
-        `;
-        return;
+        // Ajout de mocks pour la démo
+        files = [
+            { name: 'memory', type: 'folder', count: 12, modified: 'Aujourd\'hui' },
+            { name: 'agent.md', type: 'file', size: '5 KB', modified: 'Hier' },
+            { name: 'soul.md', type: 'file', size: '1 KB', modified: 'Hier' }
+        ];
     }
 
+    container.innerHTML = '';
     const fileList = document.createElement('div');
     fileList.className = 'file-list';
 
     files.forEach(file => {
         const fileEl = document.createElement('div');
-        fileEl.className = 'file-item';
-        
+        fileEl.className = 'file-item file-clickable';
+
+        fileEl.addEventListener('click', () => {
+            if (file.type !== 'folder') openFileEditor(file);
+        });
+
         const icon = file.type === 'folder' ? '📁' : '📄';
-        const meta = file.type === 'folder' 
-            ? `${file.count || 0} fichiers` 
+        const meta = file.type === 'folder'
+            ? `${file.count || 0} fichiers`
             : `${file.size} • ${file.modified}`;
-        
+
         fileEl.innerHTML = `
             <span class="file-icon">${icon}</span>
             <div class="file-info">
                 <span class="file-name">${file.name}</span>
                 <span class="file-meta">${meta}</span>
             </div>
+            <span class="file-action">✎</span>
         `;
-        
+
         fileList.appendChild(fileEl);
     });
 
@@ -292,44 +409,40 @@ function renderFiles(container, files) {
 }
 
 /**
- * Rendu de la section conversations
+ * Rendu de la section chat
  */
-function renderConversations(container, conversations) {
-    if (!conversations || conversations.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <span class="empty-icon">💭</span>
-                <p>Aucune conversation</p>
-                <span class="empty-hint">Les conversations apparaîtront ici</span>
-            </div>
-        `;
-        return;
-    }
+function renderChat(container, conversations) {
+    // Si la logique de conversations précédente est passée, on les transforme en bulles
+    container.innerHTML = '';
 
-    const convList = document.createElement('div');
-    convList.className = 'conversation-list';
+    // Message de bienvenue par défaut
+    appendChatMessage('Système', 'Session démarrée.', 'system');
+}
 
-    conversations.forEach(conv => {
-        const convEl = document.createElement('div');
-        convEl.className = 'conversation-item';
-        
-        const typeIcon = conv.type === 'delegation' ? '📤' : 
-                         conv.type === 'response' ? '📥' : '💬';
-        const time = new Date(conv.timestamp).toLocaleTimeString();
-        
-        convEl.innerHTML = `
-            <div class="conversation-header">
-                <span class="conv-type">${typeIcon} ${conv.type}</span>
-                <span class="conv-time">${time}</span>
-            </div>
-            <div class="conversation-with">Avec: ${conv.with}</div>
-            <div class="conversation-content">${conv.content || 'Pas de contenu'}</div>
-        `;
-        
-        convList.appendChild(convEl);
-    });
+/**
+ * Ajoute un message au chat
+ */
+function appendChatMessage(sender, content, type) {
+    if (!panelElement) return;
+    const msgContainer = panelElement.querySelector('#agent-chat-messages');
+    if (!msgContainer) return;
 
-    container.appendChild(convList);
+    // Retirer le empty-state si présent
+    const emptyState = msgContainer.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    const msgEl = document.createElement('div');
+    msgEl.className = `chat-bubble chat-${type}`; // type: 'incoming', 'outgoing', 'system'
+
+    msgEl.innerHTML = `
+        <div class="chat-bubble-sender">${sender}</div>
+        <div class="chat-bubble-content">${content}</div>
+    `;
+
+    msgContainer.appendChild(msgEl);
+
+    // Auto-scroll to bottom
+    msgContainer.scrollTop = msgContainer.scrollHeight;
 }
 
 /**
@@ -375,11 +488,11 @@ function renderTasks(container, tasks, stats) {
     tasks.forEach(task => {
         const taskEl = document.createElement('div');
         taskEl.className = `task-item task-${task.status}`;
-        
+
         const statusIcon = task.status === 'in_progress' ? '▶️' :
-                          task.status === 'completed' ? '✅' : '⏸️';
+            task.status === 'completed' ? '✅' : '⏸️';
         const priorityClass = `priority-${task.priority}`;
-        
+
         taskEl.innerHTML = `
             <div class="task-header">
                 <span class="task-status">${statusIcon}</span>
@@ -387,7 +500,7 @@ function renderTasks(container, tasks, stats) {
                 <span class="task-priority ${priorityClass}">${task.priority}</span>
             </div>
         `;
-        
+
         taskList.appendChild(taskEl);
     });
 

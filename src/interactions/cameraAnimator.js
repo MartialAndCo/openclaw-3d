@@ -96,12 +96,22 @@ export function zoomOnAgent(agentObject, onComplete = null) {
     const agentPos = new THREE.Vector3();
     agentObject.getWorldPosition(agentPos);
 
-    // Calculer une position de caméra adaptée (devant et légèrement au-dessus)
-    const offset = new THREE.Vector3(2, 3, 2); // Offset relatif
+    // Obtenir la rotation mondiale de l'agent pour se placer en face
+    const agentQuat = new THREE.Quaternion();
+    agentObject.getWorldQuaternion(agentQuat);
+
+    // Calculer une position de caméra adaptée (3/4 devant)
+    // x: côté (positif = on se met à droite de l'agent), y: hauteur, z: devant
+    const offset = new THREE.Vector3(2.5, 1.5, 2.5); // Plus sur la droite pour décaler l'agent à gauche
+    offset.applyQuaternion(agentQuat);
+
     const cameraPos = agentPos.clone().add(offset);
 
-    // LookAt légèrement au-dessus de l'agent (tête)
-    const lookAtPos = agentPos.clone().add(new THREE.Vector3(0, 1.2, 0));
+    // LookAt légèrement au-dessus de l'agent et DECALÉ vers la droite de l'agent
+    // pour que l'agent se retrouve sur la gauche de l'écran.
+    const lookAtOffset = new THREE.Vector3(1.2, 1.2, 0);
+    lookAtOffset.applyQuaternion(agentQuat);
+    const lookAtPos = agentPos.clone().add(lookAtOffset);
 
     animateCameraTo(cameraPos, lookAtPos, 1200, () => {
         state.controls.enabled = true;
@@ -125,6 +135,55 @@ export function zoomOnScreen(screenObject, onComplete = null) {
     const cameraPos = new THREE.Vector3(screenPos.x, screenPos.y, screenPos.z - 2.0);
 
     // LookAt le centre de l'écran
+    const lookAtPos = screenPos.clone();
+
+    animateCameraTo(cameraPos, lookAtPos, 1200, () => {
+        state.controls.enabled = true;
+        if (onComplete) onComplete();
+    });
+}
+
+/**
+ * Zoom sur le moniteur du CEO
+ * @param {THREE.Object3D} ceoGroup - Le groupe 3D racine du CEO et bureau
+ * @param {Function} onComplete - Callback
+ */
+export function zoomOnCEOScreen(ceoGroup, onComplete = null) {
+    saveCameraState();
+
+    const groupPos = new THREE.Vector3();
+    ceoGroup.getWorldPosition(groupPos);
+
+    const groupQuat = new THREE.Quaternion();
+    ceoGroup.getWorldQuaternion(groupQuat);
+
+    // Le moniteur (display) est à (0, 1.1, 0.161) par rapport au groupe du bureau
+    const screenLocalPos = new THREE.Vector3(0, 1.1, 0.161);
+    const screenWorldPos = screenLocalPos.clone().applyQuaternion(groupQuat).add(groupPos);
+
+    // On place la caméra juste devant l'écran
+    const cameraLocalOffset = new THREE.Vector3(0, 0, 0.7);
+    const cameraWorldPos = screenWorldPos.clone().add(cameraLocalOffset.clone().applyQuaternion(groupQuat));
+
+    animateCameraTo(cameraWorldPos, screenWorldPos, 1200, () => {
+        state.controls.enabled = true;
+        if (onComplete) onComplete();
+    });
+}
+
+/**
+ * Super Zoom plein écran sur un écran spécifique
+ * @param {THREE.Object3D} screenObject - Le groupe 3D de l'écran
+ * @param {Function} onComplete - Callback quand le zoom est terminé
+ */
+export function superZoomOnScreen(screenObject, onComplete = null) {
+    saveCameraState();
+
+    const screenPos = new THREE.Vector3();
+    screenObject.getWorldPosition(screenPos);
+
+    // Zoom très proche et parfaitement centré pour remplir l'écran plein écran
+    const cameraPos = new THREE.Vector3(screenPos.x, screenPos.y, screenPos.z - 1.25);
     const lookAtPos = screenPos.clone();
 
     animateCameraTo(cameraPos, lookAtPos, 1200, () => {
